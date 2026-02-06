@@ -26,7 +26,7 @@ type TerminalAppearance = {
     background: string;
     foreground: string;
     cursor: string;
-    selection?: string;
+    selectionBackground?: string;
   };
   fontFamily: string;
 };
@@ -89,7 +89,7 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
       background,
       foreground,
       cursor,
-      selection: selection || undefined,
+      selectionBackground: selection || undefined,
     },
     fontFamily,
   };
@@ -216,7 +216,6 @@ export function useTerminalSession({
         cursorBlink: true,
         fontSize: 12,
         fontFamily: appearance.fontFamily,
-        allowTransparency: true,
         theme: appearance.theme,
         scrollback: 5000,
       });

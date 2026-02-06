@@ -143,8 +143,7 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-left: auto;
-  margin-right: 8px;
+  margin-left: 12px;
 }
 
 .tool-status-indicator.pending {
