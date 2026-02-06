@@ -431,28 +431,19 @@ function buildToolSummary(
   }
 
   {
-    const toolName = toolNameFromTitle(item.title);
-    if (toolName) {
-      const args = parseToolArgs(item.detail);
-      const actionValue = firstStringField(args, [
-        "query", "pattern", "prompt", "skill", "description", "path", "file_path",
-        "text", "command", "url", "content",
-      ]);
-      return {
-        label: toolName,
-        value: actionValue,
-        detail: item.detail || "",
-        output: item.output || "",
-      };
-    }
+    const toolName = toolNameFromTitle(item.title) || item.title || "tool";
+    const args = parseToolArgs(item.detail);
+    const actionValue = firstStringField(args, [
+      "description", "query", "pattern", "prompt", "skill", "path", "file_path",
+      "text", "command", "url", "content",
+    ]);
+    return {
+      label: toolName,
+      value: actionValue,
+      detail: item.detail || "",
+      output: item.output || "",
+    };
   }
-
-  return {
-    label: item.title || "tool",
-    value: "",
-    detail: item.detail || "",
-    output: item.output || "",
-  };
 }
 
 function toolIconForSummary(
@@ -901,7 +892,7 @@ const ToolRow = memo(function ToolRow({
           )}
           <span className={`tool-inline-dot ${tone}`} aria-hidden />
         </button>
-        {isExpanded && summary.detail && !isFileChange && (
+        {isExpanded && summary.detail && !isFileChange && !parseToolArgs(summary.detail) && (
           <div className="tool-inline-detail">{summary.detail}</div>
         )}
         {isExpanded && isCommand && item.detail && (
