@@ -60,17 +60,17 @@ export function SidebarHeader({
         aria-label={t("sidebar.openHome")}
       >
         CodeMoss
+        {version && (
+          <span className="sidebar-version" title={`Version ${version}`}>
+            {version}
+          </span>
+        )}
       </button>
       <div className="sidebar-header-actions">
         <KanbanModeToggle
           appMode={appMode}
           onAppModeChange={onAppModeChange}
         />
-        {version && (
-          <span className="sidebar-version" title={`Version ${version}`}>
-            v{version}
-          </span>
-        )}
       </div>
     </div>
   );

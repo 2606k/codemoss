@@ -1116,6 +1116,20 @@ where
     read_file(&root, path)
 }
 
+pub(crate) async fn write_workspace_file_core<F>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    path: &str,
+    content: &str,
+    write_file: F,
+) -> Result<(), String>
+where
+    F: Fn(&PathBuf, &str, &str) -> Result<(), String>,
+{
+    let root = resolve_workspace_root(workspaces, workspace_id).await?;
+    write_file(&root, path, content)
+}
+
 fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
     workspaces.sort_by(|a, b| {
         let a_order = a.settings.sort_order.unwrap_or(u32::MAX);

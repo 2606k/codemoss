@@ -1,0 +1,487 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useTranslation } from "react-i18next";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import Code from "lucide-react/dist/esm/icons/code";
+import Save from "lucide-react/dist/esm/icons/save";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { keymap } from "@codemirror/view";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
+import { markdown as cmMarkdown } from "@codemirror/lang-markdown";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { xml } from "@codemirror/lang-xml";
+import { yaml } from "@codemirror/lang-yaml";
+import { readWorkspaceFile, writeWorkspaceFile } from "../../../services/tauri";
+import { highlightLine, languageFromPath } from "../../../utils/syntax";
+import { Markdown } from "../../messages/components/Markdown";
+import { OpenAppMenu } from "../../app/components/OpenAppMenu";
+import { pushErrorToast } from "../../../services/toasts";
+import type { OpenAppTarget } from "../../../types";
+import type { Extension } from "@codemirror/state";
+
+type FileViewPanelProps = {
+  workspaceId: string;
+  workspacePath: string;
+  filePath: string;
+  initialMode?: "edit" | "preview";
+  openTargets: OpenAppTarget[];
+  openAppIconById: Record<string, string>;
+  selectedOpenAppId: string;
+  onSelectOpenAppId: (id: string) => void;
+  onClose: () => void;
+  onInsertText?: (text: string) => void;
+};
+
+const markdownExtensions = new Set(["md", "mdx"]);
+
+function isMarkdownPath(path: string) {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return markdownExtensions.has(ext);
+}
+
+function resolveAbsolutePath(workspacePath: string, relativePath: string) {
+  const base = workspacePath.endsWith("/")
+    ? workspacePath.slice(0, -1)
+    : workspacePath;
+  return `${base}/${relativePath}`;
+}
+
+function cmLangExtension(filePath: string): Extension[] {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "js":
+    case "mjs":
+      return [javascript()];
+    case "jsx":
+      return [javascript({ jsx: true })];
+    case "ts":
+      return [javascript({ typescript: true })];
+    case "tsx":
+      return [javascript({ jsx: true, typescript: true })];
+    case "json":
+      return [json()];
+    case "html":
+      return [html()];
+    case "css":
+    case "scss":
+    case "sass":
+      return [css()];
+    case "md":
+    case "mdx":
+      return [cmMarkdown()];
+    case "py":
+      return [python()];
+    case "rs":
+      return [rust()];
+    case "xml":
+    case "svg":
+      return [xml()];
+    case "yaml":
+    case "yml":
+      return [yaml()];
+    default:
+      return [];
+  }
+}
+
+export function FileViewPanel({
+  workspaceId,
+  workspacePath,
+  filePath,
+  initialMode = "edit",
+  openTargets,
+  openAppIconById,
+  selectedOpenAppId,
+  onSelectOpenAppId,
+  onClose,
+  onInsertText,
+}: FileViewPanelProps) {
+  const { t } = useTranslation();
+  const isMarkdown = useMemo(() => isMarkdownPath(filePath), [filePath]);
+  const [mode, setMode] = useState<"preview" | "edit">(initialMode);
+  const [mdViewMode, setMdViewMode] = useState<"rendered" | "source">("rendered");
+  const [content, setContent] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const savedContentRef = useRef("");
+  const cmRef = useRef<ReactCodeMirrorRef>(null);
+  const requestIdRef = useRef(0);
+
+  const isDirty = content !== savedContentRef.current;
+  const absolutePath = useMemo(
+    () => resolveAbsolutePath(workspacePath, filePath),
+    [workspacePath, filePath],
+  );
+
+  // Load file content
+  useEffect(() => {
+    let cancelled = false;
+    requestIdRef.current += 1;
+    const currentRequest = requestIdRef.current;
+    setIsLoading(true);
+    setError(null);
+
+    readWorkspaceFile(workspaceId, filePath)
+      .then((response) => {
+        if (cancelled || currentRequest !== requestIdRef.current) return;
+        setContent(response.content ?? "");
+        savedContentRef.current = response.content ?? "";
+        setTruncated(Boolean(response.truncated));
+      })
+      .catch((err) => {
+        if (cancelled || currentRequest !== requestIdRef.current) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled && currentRequest === requestIdRef.current) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, filePath]);
+
+  // Reset mode when file changes
+  useEffect(() => {
+    setMode(initialMode);
+    setMdViewMode("rendered");
+  }, [filePath, initialMode]);
+
+  // Save handler
+  const handleSave = useCallback(async () => {
+    if (!isDirty || isSaving || truncated) return;
+    setIsSaving(true);
+    try {
+      await writeWorkspaceFile(workspaceId, filePath, content);
+      savedContentRef.current = content;
+    } catch (err) {
+      pushErrorToast({
+        title: "Failed to save file",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [workspaceId, filePath, content, isDirty, isSaving, truncated]);
+
+  // Auto-focus CodeMirror when entering edit mode
+  useEffect(() => {
+    if (mode === "edit" && !isLoading && !truncated) {
+      requestAnimationFrame(() => {
+        cmRef.current?.view?.focus();
+      });
+    }
+  }, [mode, isLoading, truncated]);
+
+  // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
+  const cmExtensions = useMemo(() => {
+    const langExt = cmLangExtension(filePath);
+    return [...langExt];
+  }, [filePath]);
+
+  // Use ref to always have latest handleSave for CodeMirror keymap
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
+  const saveKeymapExt = useMemo(
+    () =>
+      keymap.of([
+        {
+          key: "Mod-s",
+          run: () => {
+            handleSaveRef.current();
+            return true;
+          },
+        },
+      ]),
+    [],
+  );
+
+  // Keyboard shortcut: Cmd+S / Ctrl+S (works in any mode, including preview)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+        event.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSave]);
+
+  // Handle close with unsaved changes
+  const handleClose = useCallback(() => {
+    if (isDirty) {
+      const confirmed = window.confirm(t("files.discardChangesMessage"));
+      if (!confirmed) return;
+    }
+    onClose();
+  }, [isDirty, onClose, t]);
+
+  // Switch to edit mode
+  const handleEnterEdit = useCallback(() => {
+    if (truncated) return;
+    setMode("edit");
+    requestAnimationFrame(() => {
+      cmRef.current?.view?.focus();
+    });
+  }, [truncated]);
+
+  // Switch to preview mode
+  const handleEnterPreview = useCallback(() => {
+    setMode("preview");
+  }, []);
+
+  // Syntax highlighted lines for code preview
+  const language = useMemo(() => languageFromPath(filePath), [filePath]);
+  const lines = useMemo(() => content.split("\n"), [content]);
+  const highlightedLines = useMemo(
+    () =>
+      lines.map((line) => {
+        const html = highlightLine(line, language);
+        return html || "&nbsp;";
+      }),
+    [lines, language],
+  );
+
+  // ── Topbar ──
+  const renderTopbar = () => (
+    <div className="fvp-topbar">
+      <div className="fvp-topbar-left">
+        <button
+          type="button"
+          className="icon-button fvp-back"
+          onClick={handleClose}
+          aria-label={t("files.backToChat")}
+          title={t("files.backToChat")}
+        >
+          <ArrowLeft size={16} aria-hidden />
+        </button>
+        <span className="fvp-filepath">{filePath}</span>
+        {isDirty && <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} />}
+        {truncated && <span className="fvp-truncated">{t("files.truncated")}</span>}
+      </div>
+      <div className="fvp-topbar-right">
+        {isMarkdown && mode === "preview" && (
+          <div className="fvp-toggle-group">
+            <button
+              type="button"
+              className={`ghost fvp-toggle-btn ${mdViewMode === "rendered" ? "is-active" : ""}`}
+              onClick={() => setMdViewMode("rendered")}
+            >
+              <Eye size={14} aria-hidden />
+              <span>{t("files.preview")}</span>
+            </button>
+            <button
+              type="button"
+              className={`ghost fvp-toggle-btn ${mdViewMode === "source" ? "is-active" : ""}`}
+              onClick={() => setMdViewMode("source")}
+            >
+              <Code size={14} aria-hidden />
+              <span>{t("files.source")}</span>
+            </button>
+          </div>
+        )}
+        {mode === "preview" ? (
+          <button
+            type="button"
+            className="ghost fvp-action-btn"
+            onClick={handleEnterEdit}
+            disabled={truncated}
+            title={truncated ? t("files.fileTooLarge") : t("files.edit")}
+          >
+            <Pencil size={14} aria-hidden />
+            <span>{t("files.edit")}</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="ghost fvp-action-btn"
+              onClick={handleEnterPreview}
+            >
+              <Eye size={14} aria-hidden />
+              <span>{t("files.preview")}</span>
+            </button>
+            <button
+              type="button"
+              className={`primary fvp-action-btn fvp-save-btn ${isDirty ? "" : "is-saved"}`}
+              onClick={handleSave}
+              disabled={!isDirty || isSaving}
+            >
+              <Save size={14} aria-hidden />
+              <span>{isSaving ? t("files.saving") : isDirty ? t("files.save") : t("files.saved")}</span>
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Content area ──
+  const renderContent = () => {
+    if (isLoading) {
+      return <div className="fvp-status">{t("files.loadingFile")}</div>;
+    }
+    if (error) {
+      return <div className="fvp-status fvp-error">{error}</div>;
+    }
+
+    // Edit mode
+    if (mode === "edit") {
+      if (isMarkdown) {
+        // Split pane: editor on left, preview on right
+        return (
+          <div className="fvp-split">
+            <div className="fvp-split-editor">
+              <CodeMirror
+                ref={cmRef}
+                value={content}
+                onChange={setContent}
+                extensions={[saveKeymapExt, ...cmExtensions]}
+                theme="dark"
+                className="fvp-cm"
+                basicSetup={{
+                  lineNumbers: true,
+                  foldGutter: true,
+                  bracketMatching: true,
+                  closeBrackets: true,
+                  highlightActiveLine: true,
+                  indentOnInput: true,
+                  tabSize: 2,
+                }}
+              />
+            </div>
+            <div className="fvp-split-divider" />
+            <div className="fvp-split-preview">
+              <Markdown
+                value={content}
+                className="fvp-markdown"
+                codeBlockStyle="message"
+              />
+            </div>
+          </div>
+        );
+      }
+      // Code edit: CodeMirror with syntax highlighting
+      return (
+        <div className="fvp-editor">
+          <CodeMirror
+            ref={cmRef}
+            value={content}
+            onChange={setContent}
+            extensions={[saveKeymapExt, ...cmExtensions]}
+            theme="dark"
+            className="fvp-cm"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              highlightActiveLine: true,
+              indentOnInput: true,
+              tabSize: 2,
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Preview mode: Markdown rendered
+    if (isMarkdown && mdViewMode === "rendered") {
+      return (
+        <div className="fvp-preview-scroll">
+          <Markdown
+            value={content}
+            className="fvp-markdown"
+            codeBlockStyle="message"
+          />
+        </div>
+      );
+    }
+
+    // Preview mode: code (or markdown source)
+    return (
+      <div className="fvp-code-preview" role="list">
+        {lines.map((_, index) => {
+          const html = highlightedLines[index] ?? "&nbsp;";
+          return (
+            <div key={`line-${index}`} className="fvp-code-line">
+              <span className="fvp-line-number">{index + 1}</span>
+              <span
+                className="fvp-line-text"
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ── Footer ──
+  const renderFooter = () => (
+    <div className="fvp-footer">
+      <div className="fvp-footer-left">
+        {mode === "edit" && isDirty && (
+          <span className="fvp-footer-hint">
+            <span className="fvp-dirty-dot" />
+            {t("files.unsavedChanges")}
+            <span className="fvp-footer-shortcut">{t("files.saveShortcut")}</span>
+          </span>
+        )}
+        {mode === "edit" && !isDirty && (
+          <span className="fvp-footer-hint fvp-footer-saved">{t("files.saved")}</span>
+        )}
+        {mode === "preview" && truncated && (
+          <span className="fvp-footer-hint">{t("files.readOnly")}</span>
+        )}
+      </div>
+      <div className="fvp-footer-right">
+        {mode === "preview" && onInsertText && (
+          <button
+            type="button"
+            className="ghost fvp-action-btn"
+            onClick={() => {
+              const fence = language ? `\`\`\`${language}` : "```";
+              const snippet = `${filePath}\n${fence}\n${content}\n\`\`\``;
+              onInsertText(snippet);
+            }}
+          >
+            {t("files.addToChat")}
+          </button>
+        )}
+        <OpenAppMenu
+          path={absolutePath}
+          openTargets={openTargets}
+          selectedOpenAppId={selectedOpenAppId}
+          onSelectOpenAppId={onSelectOpenAppId}
+          iconById={openAppIconById}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fvp">
+      {renderTopbar()}
+      <div className="fvp-body">{renderContent()}</div>
+      {renderFooter()}
+    </div>
+  );
+}

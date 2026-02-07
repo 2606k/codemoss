@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 #[cfg(target_os = "macos")]
 use super::macos::get_open_app_icon_inner;
-use super::files::{list_workspace_files_inner, read_workspace_file_inner, WorkspaceFileResponse, WorkspaceFilesResponse};
+use super::files::{list_workspace_files_inner, read_workspace_file_inner, write_workspace_file_inner, WorkspaceFileResponse, WorkspaceFilesResponse};
 use super::git::{
     git_branch_exists, git_find_remote_for_branch, git_get_origin_url, git_remote_branch_exists,
     git_remote_exists, is_missing_worktree_error, run_git_command, run_git_command_bytes,
@@ -69,6 +69,35 @@ pub(crate) async fn read_workspace_file(
         &workspace_id,
         &path,
         |root, rel_path| read_workspace_file_inner(root, rel_path),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn write_workspace_file(
+    workspace_id: String,
+    path: String,
+    content: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
+            &*state,
+            app,
+            "write_workspace_file",
+            json!({ "workspaceId": workspace_id, "path": path, "content": content }),
+        )
+        .await?;
+        return Ok(());
+    }
+
+    workspaces_core::write_workspace_file_core(
+        &state.workspaces,
+        &workspace_id,
+        &path,
+        &content,
+        |root, rel_path, data| write_workspace_file_inner(root, rel_path, data),
     )
     .await
 }

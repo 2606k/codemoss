@@ -8,6 +8,7 @@ import { RichTextInput } from "../../../components/common/RichTextInput";
 
 type CreateTaskInput = {
   workspaceId: string;
+  panelId: string;
   title: string;
   description: string;
   engineType: EngineType;
@@ -20,6 +21,7 @@ type CreateTaskInput = {
 type TaskCreateModalProps = {
   isOpen: boolean;
   workspaceId: string;
+  panelId: string;
   defaultStatus: KanbanTaskStatus;
   engineStatuses: EngineStatus[];
   onSubmit: (input: CreateTaskInput) => void;
@@ -29,6 +31,7 @@ type TaskCreateModalProps = {
 export function TaskCreateModal({
   isOpen,
   workspaceId,
+  panelId,
   defaultStatus,
   engineStatuses,
   onSubmit,
@@ -95,6 +98,7 @@ export function TaskCreateModal({
     if (!trimmedTitle) return;
     onSubmit({
       workspaceId,
+      panelId,
       title: trimmedTitle,
       description: description.trim(),
       engineType,

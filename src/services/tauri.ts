@@ -615,6 +615,14 @@ export async function readWorkspaceFile(
   });
 }
 
+export async function writeWorkspaceFile(
+  workspaceId: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  return invoke("write_workspace_file", { workspaceId, path, content });
+}
+
 export async function readAgentMd(workspaceId: string): Promise<AgentMdResponse> {
   return fileRead("workspace", "agents", workspaceId);
 }

@@ -2,22 +2,19 @@ import type { ReactNode } from "react";
 import { useMemo } from "react";
 import type { AppMode, EngineStatus, EngineType, WorkspaceInfo } from "../../../types";
 import type {
+  KanbanPanel,
   KanbanTask,
   KanbanTaskStatus,
   KanbanViewState,
 } from "../types";
 import { ProjectList } from "./ProjectList";
+import { PanelList } from "./PanelList";
 import { KanbanBoard } from "./KanbanBoard";
 import { KANBAN_COLUMNS } from "../constants";
 
-type WorkspaceGroupSection = {
-  id: string | null;
-  name: string;
-  workspaces: WorkspaceInfo[];
-};
-
 type CreateTaskInput = {
   workspaceId: string;
+  panelId: string;
   title: string;
   description: string;
   engineType: EngineType;
@@ -31,6 +28,7 @@ type KanbanViewProps = {
   viewState: KanbanViewState;
   onViewStateChange: (state: KanbanViewState) => void;
   workspaces: WorkspaceInfo[];
+  panels: KanbanPanel[];
   tasks: KanbanTask[];
   onCreateTask: (input: CreateTaskInput) => KanbanTask;
   onUpdateTask: (taskId: string, changes: Partial<KanbanTask>) => void;
@@ -40,6 +38,9 @@ type KanbanViewProps = {
     newStatus: KanbanTaskStatus,
     newSortOrder: number
   ) => void;
+  onCreatePanel: (input: { workspaceId: string; name: string }) => KanbanPanel;
+  onUpdatePanel: (panelId: string, changes: Partial<KanbanPanel>) => void;
+  onDeletePanel: (panelId: string) => void;
   onAddWorkspace: () => void;
   onAppModeChange: (mode: AppMode) => void;
   engineStatuses: EngineStatus[];
@@ -49,7 +50,6 @@ type KanbanViewProps = {
   onOpenTaskConversation: (task: KanbanTask) => void;
   onCloseTaskConversation: () => void;
   onDragToInProgress: (task: KanbanTask) => void;
-  groupedWorkspaces?: WorkspaceGroupSection[];
   kanbanConversationWidth?: number;
   onKanbanConversationResizeStart?: (event: React.MouseEvent<HTMLDivElement>) => void;
 };
@@ -58,11 +58,15 @@ export function KanbanView({
   viewState,
   onViewStateChange,
   workspaces,
+  panels,
   tasks,
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
   onReorderTask,
+  onCreatePanel,
+  onUpdatePanel,
+  onDeletePanel,
   onAddWorkspace,
   onAppModeChange,
   engineStatuses,
@@ -72,35 +76,47 @@ export function KanbanView({
   onOpenTaskConversation,
   onCloseTaskConversation,
   onDragToInProgress,
-  groupedWorkspaces,
   kanbanConversationWidth,
   onKanbanConversationResizeStart,
 }: KanbanViewProps) {
-  // 项目切换处理
   const handleSelectWorkspace = useMemo(
     () => (workspaceId: string) => {
       onCloseTaskConversation();
-      onViewStateChange({ view: "board", workspaceId });
+      onViewStateChange({ view: "panels", workspaceId });
     },
     [onCloseTaskConversation, onViewStateChange]
   );
+
+  // --- Board view ---
   if (viewState.view === "board") {
     const workspace = workspaces.find((w) => w.id === viewState.workspaceId);
     if (!workspace) {
       onViewStateChange({ view: "projects" });
       return null;
     }
-    const workspaceTasks = tasks.filter(
-      (t) => t.workspaceId === viewState.workspaceId
+    const panel = panels.find((p) => p.id === viewState.panelId);
+    if (!panel) {
+      onViewStateChange({ view: "panels", workspaceId: viewState.workspaceId });
+      return null;
+    }
+    const panelTasks = tasks.filter(
+      (t) => t.panelId === viewState.panelId
     );
+    const workspacePanels = panels
+      .filter((p) => p.workspaceId === viewState.workspaceId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
     return (
       <KanbanBoard
         workspace={workspace}
-        tasks={workspaceTasks}
+        workspaces={workspaces}
+        panel={panel}
+        panels={workspacePanels}
+        tasks={panelTasks}
         columns={KANBAN_COLUMNS}
         onBack={() => {
           onCloseTaskConversation();
-          onViewStateChange({ view: "projects" });
+          onViewStateChange({ view: "panels", workspaceId: viewState.workspaceId });
         }}
         onCreateTask={onCreateTask}
         onUpdateTask={onUpdateTask}
@@ -114,22 +130,61 @@ export function KanbanView({
         onSelectTask={onOpenTaskConversation}
         onCloseConversation={onCloseTaskConversation}
         onDragToInProgress={onDragToInProgress}
-        groupedWorkspaces={groupedWorkspaces}
-        activeWorkspaceId={viewState.workspaceId}
-        onSelectWorkspace={handleSelectWorkspace}
+        onSelectWorkspace={(workspaceId: string) => {
+          onCloseTaskConversation();
+          onViewStateChange({ view: "panels", workspaceId });
+        }}
+        onSelectPanel={(panelId: string) => {
+          onCloseTaskConversation();
+          onViewStateChange({ view: "board", workspaceId: viewState.workspaceId, panelId });
+        }}
         kanbanConversationWidth={kanbanConversationWidth}
         onKanbanConversationResizeStart={onKanbanConversationResizeStart}
       />
     );
   }
 
+  // --- Panels view ---
+  if (viewState.view === "panels") {
+    const workspace = workspaces.find((w) => w.id === viewState.workspaceId);
+    if (!workspace) {
+      onViewStateChange({ view: "projects" });
+      return null;
+    }
+    const workspacePanels = panels.filter(
+      (p) => p.workspaceId === viewState.workspaceId
+    );
+    const workspaceTasks = tasks.filter(
+      (t) => t.workspaceId === viewState.workspaceId
+    );
+
+    return (
+      <PanelList
+        workspace={workspace}
+        panels={workspacePanels}
+        tasks={workspaceTasks}
+        onBack={() => onViewStateChange({ view: "projects" })}
+        onSelectPanel={(panelId) =>
+          onViewStateChange({ view: "board", workspaceId: viewState.workspaceId, panelId })
+        }
+        onCreatePanel={(name) =>
+          onCreatePanel({ workspaceId: viewState.workspaceId, name })
+        }
+        onRenamePanel={(panelId, name) =>
+          onUpdatePanel(panelId, { name })
+        }
+        onDeletePanel={onDeletePanel}
+        onAppModeChange={onAppModeChange}
+      />
+    );
+  }
+
+  // --- Projects view ---
   return (
     <ProjectList
       workspaces={workspaces}
       tasks={tasks}
-      onSelectWorkspace={(workspaceId) =>
-        onViewStateChange({ view: "board", workspaceId })
-      }
+      onSelectWorkspace={handleSelectWorkspace}
       onAddWorkspace={onAddWorkspace}
       onAppModeChange={onAppModeChange}
     />

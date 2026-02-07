@@ -112,3 +112,42 @@ pub(crate) fn read_workspace_file_inner(
         String::from_utf8(buffer).map_err(|_| "File is not valid UTF-8".to_string())?;
     Ok(WorkspaceFileResponse { content, truncated })
 }
+
+pub(crate) fn write_workspace_file_inner(
+    root: &PathBuf,
+    relative_path: &str,
+    content: &str,
+) -> Result<(), String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let candidate = canonical_root.join(relative_path);
+
+    // Ensure the parent directory exists so we can canonicalize safely.
+    if let Some(parent) = candidate.parent() {
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|err| format!("Failed to resolve parent directory: {err}"))?;
+        if !canonical_parent.starts_with(&canonical_root) {
+            return Err("Invalid file path".to_string());
+        }
+    }
+
+    // Block writes into .git directories.
+    let normalized = relative_path.replace('\\', "/");
+    if normalized == ".git"
+        || normalized.starts_with(".git/")
+        || normalized.contains("/.git/")
+        || normalized.contains("/.git")
+    {
+        return Err("Cannot write to .git directory".to_string());
+    }
+
+    if content.len() > MAX_WORKSPACE_FILE_BYTES as usize {
+        return Err("File content exceeds maximum allowed size".to_string());
+    }
+
+    std::fs::write(&candidate, content)
+        .map_err(|err| format!("Failed to write file: {err}"))?;
+    Ok(())
+}

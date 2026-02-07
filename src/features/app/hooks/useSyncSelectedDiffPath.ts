@@ -3,7 +3,7 @@ import type { GitCommitDiff, GitHubPullRequestDiff } from "../../../types";
 
 type Params = {
   diffSource: "local" | "pr" | "commit";
-  centerMode: "chat" | "diff";
+  centerMode: "chat" | "diff" | "editor";
   gitPullRequestDiffs: GitHubPullRequestDiff[];
   gitCommitDiffs: GitCommitDiff[];
   selectedDiffPath: string | null;

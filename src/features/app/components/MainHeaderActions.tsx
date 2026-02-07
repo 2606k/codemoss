@@ -5,7 +5,7 @@ import type { SidebarToggleProps } from "../../layout/components/SidebarToggleCo
 import { RightPanelCollapseButton } from "../../layout/components/SidebarToggleControls";
 
 type MainHeaderActionsProps = {
-  centerMode: "chat" | "diff";
+  centerMode: "chat" | "diff" | "editor";
   gitDiffViewStyle: "split" | "unified";
   onSelectDiffViewStyle: (style: "split" | "unified") => void;
   isCompact: boolean;

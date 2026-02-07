@@ -158,6 +158,7 @@ pub fn run() {
             workspaces::connect_workspace,
             workspaces::list_workspace_files,
             workspaces::read_workspace_file,
+            workspaces::write_workspace_file,
             workspaces::open_workspace_in,
             workspaces::get_open_app_icon,
             // Git

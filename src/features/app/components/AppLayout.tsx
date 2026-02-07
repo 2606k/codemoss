@@ -12,7 +12,7 @@ type AppLayoutProps = {
   showGitDetail: boolean;
   activeTab: "projects" | "codex" | "git" | "log";
   tabletTab: "codex" | "git" | "log";
-  centerMode: "chat" | "diff";
+  centerMode: "chat" | "diff" | "editor";
   hasActivePlan: boolean;
   activeWorkspace: boolean;
   sidebarNode: ReactNode;
@@ -28,6 +28,7 @@ type AppLayoutProps = {
   tabBarNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
+  fileViewPanelNode: ReactNode;
   planPanelNode: ReactNode;
   debugPanelNode: ReactNode;
   debugPanelFullNode: ReactNode;
@@ -65,6 +66,7 @@ export const AppLayout = memo(function AppLayout({
   tabBarNode,
   gitDiffPanelNode,
   gitDiffViewerNode,
+  fileViewPanelNode,
   planPanelNode,
   debugPanelNode,
   debugPanelFullNode,
@@ -138,6 +140,7 @@ export const AppLayout = memo(function AppLayout({
       centerMode={centerMode}
       messagesNode={messagesNode}
       gitDiffViewerNode={gitDiffViewerNode}
+      fileViewPanelNode={fileViewPanelNode}
       gitDiffPanelNode={gitDiffPanelNode}
       planPanelNode={planPanelNode}
       composerNode={composerNode}

@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import type { AppMode, EngineStatus, EngineType, WorkspaceInfo } from "../../../types";
 import type {
   KanbanColumnDef,
+  KanbanPanel,
   KanbanTask,
   KanbanTaskStatus,
 } from "../types";
@@ -15,6 +16,7 @@ import { TaskCreateModal } from "./TaskCreateModal";
 
 type CreateTaskInput = {
   workspaceId: string;
+  panelId: string;
   title: string;
   description: string;
   engineType: EngineType;
@@ -24,14 +26,11 @@ type CreateTaskInput = {
   autoStart: boolean;
 };
 
-type WorkspaceGroupSection = {
-  id: string | null;
-  name: string;
-  workspaces: WorkspaceInfo[];
-};
-
 type KanbanBoardProps = {
   workspace: WorkspaceInfo;
+  workspaces: WorkspaceInfo[];
+  panel: KanbanPanel;
+  panels: KanbanPanel[];
   tasks: KanbanTask[];
   columns: KanbanColumnDef[];
   onBack: () => void;
@@ -51,15 +50,17 @@ type KanbanBoardProps = {
   onSelectTask: (task: KanbanTask) => void;
   onCloseConversation: () => void;
   onDragToInProgress: (task: KanbanTask) => void;
-  groupedWorkspaces?: WorkspaceGroupSection[];
-  activeWorkspaceId?: string | null;
-  onSelectWorkspace?: (workspaceId: string) => void;
+  onSelectWorkspace: (workspaceId: string) => void;
+  onSelectPanel: (panelId: string) => void;
   kanbanConversationWidth?: number;
   onKanbanConversationResizeStart?: (event: MouseEvent<HTMLDivElement>) => void;
 };
 
 export function KanbanBoard({
   workspace,
+  workspaces,
+  panel,
+  panels,
   tasks,
   columns,
   onBack,
@@ -74,9 +75,8 @@ export function KanbanBoard({
   onSelectTask,
   onCloseConversation,
   onDragToInProgress,
-  groupedWorkspaces,
-  activeWorkspaceId,
   onSelectWorkspace,
+  onSelectPanel,
   kanbanConversationWidth,
   onKanbanConversationResizeStart,
 }: KanbanBoardProps) {
@@ -106,7 +106,6 @@ export function KanbanBoard({
       inprogress: [],
       testing: [],
       done: [],
-      cancelled: [],
     };
     for (const task of filteredTasks) {
       if (map[task.status]) {
@@ -190,11 +189,13 @@ export function KanbanBoard({
     <div className="kanban-board">
       <KanbanBoardHeader
         workspace={workspace}
+        workspaces={workspaces}
+        panel={panel}
+        panels={panels}
         onBack={onBack}
         onAppModeChange={onAppModeChange}
-        groupedWorkspaces={groupedWorkspaces}
-        activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={onSelectWorkspace}
+        onSelectPanel={onSelectPanel}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
@@ -255,6 +256,7 @@ export function KanbanBoard({
       <TaskCreateModal
         isOpen={createModalOpen}
         workspaceId={workspace.id}
+        panelId={panel.id}
         defaultStatus={createDefaultStatus}
         engineStatuses={engineStatuses}
         onSubmit={handleCreateTask}

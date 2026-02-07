@@ -1,14 +1,45 @@
-import type { KanbanStoreData } from "../types";
+import type { KanbanPanel, KanbanStoreData } from "../types";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 
-const EMPTY_STORE: KanbanStoreData = { tasks: [] };
+const EMPTY_STORE: KanbanStoreData = { panels: [], tasks: [] };
 
 export function loadKanbanData(): KanbanStoreData {
-  const stored = getClientStoreSync<KanbanStoreData>("app", "kanban");
+  const stored = getClientStoreSync<Record<string, unknown>>("app", "kanban");
   if (!stored || !Array.isArray(stored.tasks)) {
     return EMPTY_STORE;
   }
-  return { tasks: stored.tasks };
+
+  // Migration: old data has no panels array — create a default panel per workspace
+  if (!Array.isArray(stored.panels)) {
+    const workspaceIds = [
+      ...new Set(
+        (stored.tasks as Array<{ workspaceId: string }>).map((t) => t.workspaceId)
+      ),
+    ];
+    const now = Date.now();
+    const panels: KanbanPanel[] = workspaceIds.map((wsId, i) => ({
+      id: `panel_migrated_${wsId}`,
+      workspaceId: wsId,
+      name: "Default",
+      sortOrder: (i + 1) * 1000,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    const tasks = (stored.tasks as Array<Record<string, unknown>>).map((t) => ({
+      ...t,
+      panelId: (t.panelId as string) ?? `panel_migrated_${t.workspaceId as string}`,
+    }));
+
+    const migrated: KanbanStoreData = {
+      panels,
+      tasks: tasks as KanbanStoreData["tasks"],
+    };
+    saveKanbanData(migrated);
+    return migrated;
+  }
+
+  return { panels: stored.panels as KanbanPanel[], tasks: stored.tasks as KanbanStoreData["tasks"] };
 }
 
 export function saveKanbanData(data: KanbanStoreData): void {

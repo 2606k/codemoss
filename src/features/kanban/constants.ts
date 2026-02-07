@@ -5,7 +5,6 @@ export const KANBAN_COLUMNS: KanbanColumnDef[] = [
   { id: "inprogress", labelKey: "kanban.columns.inprogress", color: "#3b82f6" },
   { id: "testing", labelKey: "kanban.columns.testing", color: "#f59e0b" },
   { id: "done", labelKey: "kanban.columns.done", color: "#22c55e" },
-  { id: "cancelled", labelKey: "kanban.columns.cancelled", color: "#ef4444" },
 ];
 
 export const KANBAN_STORAGE_KEY = "codemoss.kanban";

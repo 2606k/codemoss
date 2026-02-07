@@ -28,7 +28,8 @@ export function useGitPanelController({
   prDiffsLoading: boolean;
   prDiffsError: string | null;
 }) {
-  const [centerMode, setCenterMode] = useState<"chat" | "diff">("chat");
+  const [centerMode, setCenterMode] = useState<"chat" | "diff" | "editor">("chat");
+  const [editorFilePath, setEditorFilePath] = useState<string | null>(null);
   const [selectedDiffPath, setSelectedDiffPath] = useState<string | null>(null);
   const [diffScrollRequestId, setDiffScrollRequestId] = useState(0);
   const pendingDiffScrollRef = useRef(false);
@@ -232,6 +233,22 @@ export function useGitPanelController({
     [diffSource],
   );
 
+  const handleOpenFile = useCallback(
+    (path: string) => {
+      setEditorFilePath(path);
+      setCenterMode("editor");
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+    },
+    [isCompact, setActiveTab],
+  );
+
+  const handleExitEditor = useCallback(() => {
+    setCenterMode("chat");
+    setEditorFilePath(null);
+  }, []);
+
   useEffect(() => {
     if (!selectedDiffPath) {
       pendingDiffScrollRef.current = false;
@@ -258,6 +275,8 @@ export function useGitPanelController({
   return {
     centerMode,
     setCenterMode,
+    editorFilePath,
+    setEditorFilePath,
     selectedDiffPath,
     setSelectedDiffPath,
     diffScrollRequestId,
@@ -301,6 +320,8 @@ export function useGitPanelController({
     handleSelectCommit,
     handleActiveDiffPath,
     handleGitPanelModeChange,
+    handleOpenFile,
+    handleExitEditor,
     compactTab,
     activeWorkspaceIdRef,
     activeWorkspaceRef,

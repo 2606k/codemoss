@@ -4,8 +4,7 @@ export type KanbanTaskStatus =
   | "todo"
   | "inprogress"
   | "testing"
-  | "done"
-  | "cancelled";
+  | "done";
 
 export type KanbanColumnDef = {
   id: KanbanTaskStatus;
@@ -13,9 +12,19 @@ export type KanbanColumnDef = {
   color: string;
 };
 
+export type KanbanPanel = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type KanbanTask = {
   id: string;
   workspaceId: string;
+  panelId: string;
   title: string;
   description: string;
   status: KanbanTaskStatus;
@@ -32,8 +41,10 @@ export type KanbanTask = {
 
 export type KanbanViewState =
   | { view: "projects" }
-  | { view: "board"; workspaceId: string };
+  | { view: "panels"; workspaceId: string }
+  | { view: "board"; workspaceId: string; panelId: string };
 
 export type KanbanStoreData = {
+  panels: KanbanPanel[];
   tasks: KanbanTask[];
 };

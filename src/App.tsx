@@ -16,6 +16,7 @@ import "./styles/review-inline.css";
 import "./styles/diff.css";
 import "./styles/diff-viewer.css";
 import "./styles/file-tree.css";
+import "./styles/file-view-panel.css";
 import "./styles/panel-tabs.css";
 import "./styles/prompts.css";
 import "./styles/debug.css";
@@ -353,6 +354,9 @@ function MainApp() {
     handleSelectCommit,
     handleActiveDiffPath,
     handleGitPanelModeChange,
+    editorFilePath,
+    handleOpenFile,
+    handleExitEditor,
     activeWorkspaceIdRef,
     activeWorkspaceRef,
   } = useGitPanelController({
@@ -425,9 +429,13 @@ function MainApp() {
   // --- Kanban mode ---
   const [appMode, setAppMode] = useState<import("./types").AppMode>("chat");
   const {
+    panels: kanbanPanels,
     tasks: kanbanTasks,
     kanbanViewState,
     setKanbanViewState,
+    createPanel: kanbanCreatePanel,
+    updatePanel: kanbanUpdatePanel,
+    deletePanel: kanbanDeletePanel,
     createTask: kanbanCreateTask,
     updateTask: kanbanUpdateTask,
     deleteTask: kanbanDeleteTask,
@@ -1967,6 +1975,7 @@ function MainApp() {
     tabBarNode,
     gitDiffPanelNode,
     gitDiffViewerNode,
+    fileViewPanelNode,
     planPanelNode,
     debugPanelNode,
     debugPanelFullNode,
@@ -2182,6 +2191,9 @@ function MainApp() {
     onFilePanelModeChange: setFilePanelMode,
     fileTreeLoading: isFilesLoading,
     centerMode,
+    editorFilePath,
+    onOpenFile: handleOpenFile,
+    onExitEditor: handleExitEditor,
     onExitDiff: () => {
       setCenterMode("chat");
       setSelectedDiffPath(null);
@@ -2551,11 +2563,15 @@ function MainApp() {
               viewState={kanbanViewState}
               onViewStateChange={setKanbanViewState}
               workspaces={workspaces}
+              panels={kanbanPanels}
               tasks={kanbanTasks}
               onCreateTask={handleKanbanCreateTask}
               onUpdateTask={kanbanUpdateTask}
               onDeleteTask={kanbanDeleteTask}
               onReorderTask={kanbanReorderTask}
+              onCreatePanel={kanbanCreatePanel}
+              onUpdatePanel={kanbanUpdatePanel}
+              onDeletePanel={kanbanDeletePanel}
               onAddWorkspace={handleAddWorkspace}
               onAppModeChange={setAppMode}
               engineStatuses={engineStatuses}
@@ -2565,7 +2581,6 @@ function MainApp() {
               onOpenTaskConversation={handleOpenTaskConversation}
               onCloseTaskConversation={handleCloseTaskConversation}
               onDragToInProgress={handleDragToInProgress}
-              groupedWorkspaces={groupedWorkspaces}
               kanbanConversationWidth={kanbanConversationWidth}
               onKanbanConversationResizeStart={onKanbanConversationResizeStart}
             />
@@ -2590,6 +2605,7 @@ function MainApp() {
         tabBarNode={tabBarNode}
         gitDiffPanelNode={gitDiffPanelNode}
         gitDiffViewerNode={gitDiffViewerNode}
+        fileViewPanelNode={fileViewPanelNode}
         planPanelNode={planPanelNode}
         debugPanelNode={debugPanelNode}
         debugPanelFullNode={debugPanelFullNode}

@@ -98,15 +98,15 @@
 }
 
 .sidebar-version {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
-  background: var(--surface-hover);
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-weight: 500;
-  opacity: 0.8;
+  font-weight: 400;
+  opacity: 0.6;
   line-height: 1;
   white-space: nowrap;
+  margin-left: 2px;
+  vertical-align: super;
+  letter-spacing: 0.02em;
 }
 
 .sidebar-title-add {

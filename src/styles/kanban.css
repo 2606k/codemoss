@@ -165,6 +165,145 @@
   color: var(--text-secondary, #666);
 }
 
+/* --- Panel Card --- */
+.kanban-panel-card {
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.kanban-panel-card:hover {
+  border-color: var(--border-hover, #ccc);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.kanban-panel-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kanban-panel-card-icon {
+  color: var(--text-secondary, #666);
+  flex-shrink: 0;
+}
+
+.kanban-panel-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-panel-card-menu {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.kanban-panel-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.kanban-panel-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+.kanban-panel-stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.kanban-panel-card-footer {
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+}
+
+.kanban-panel-card-count {
+  color: var(--text-secondary, #666);
+}
+
+.kanban-panel-rename-input {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #111);
+  background: var(--bg-secondary, #f8f8f8);
+  border: 1px solid var(--accent-color, #3b82f6);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+/* --- Panel List Title Row --- */
+.kanban-panel-list-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.kanban-panel-list-title-row .kanban-icon-btn {
+  margin-top: 4px;
+}
+
+/* --- Panel Create Row --- */
+.kanban-panel-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.kanban-panel-create-row .kanban-input {
+  flex: 1;
+}
+
+/* --- Breadcrumb --- */
+.kanban-breadcrumb-workspace {
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.kanban-breadcrumb-sep {
+  color: var(--text-faint, #ccc);
+  font-size: 14px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* --- Danger Button --- */
+.kanban-btn-danger {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+}
+
+.kanban-btn-danger:hover {
+  background: #dc2626;
+}
+
 /* --- Kanban Board --- */
 .kanban-board {
   display: flex;

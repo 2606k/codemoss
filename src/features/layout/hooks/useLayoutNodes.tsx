@@ -11,6 +11,7 @@ import { Composer } from "../../composer/components/Composer";
 import { GitDiffPanel } from "../../git/components/GitDiffPanel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
+import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { DebugPanel } from "../../debug/components/DebugPanel";
 import { PlanPanel } from "../../plan/components/PlanPanel";
@@ -215,7 +216,10 @@ type LayoutNodesOptions = {
   onSaveLaunchScript: () => void;
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
-  centerMode: "chat" | "diff";
+  centerMode: "chat" | "diff" | "editor";
+  editorFilePath: string | null;
+  onOpenFile: (path: string) => void;
+  onExitEditor: () => void;
   onExitDiff: () => void;
   activeTab: "projects" | "codex" | "git" | "log";
   onSelectTab: (tab: "projects" | "codex" | "git" | "log") => void;
@@ -446,6 +450,7 @@ type LayoutNodesResult = {
   tabBarNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
+  fileViewPanelNode: ReactNode;
   planPanelNode: ReactNode;
   debugPanelNode: ReactNode;
   debugPanelFullNode: ReactNode;
@@ -732,6 +737,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         onInsertText={options.onInsertComposerText}
+        onOpenFile={options.onOpenFile}
         openTargets={options.openAppTargets}
         openAppIconById={options.openAppIconById}
         selectedOpenAppId={options.selectedOpenAppId}
@@ -853,6 +859,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     />
   );
 
+  const fileViewPanelNode =
+    options.editorFilePath && options.activeWorkspace ? (
+      <FileViewPanel
+        workspaceId={options.activeWorkspace.id}
+        workspacePath={options.activeWorkspace.path}
+        filePath={options.editorFilePath}
+        openTargets={options.openAppTargets}
+        openAppIconById={options.openAppIconById}
+        selectedOpenAppId={options.selectedOpenAppId}
+        onSelectOpenAppId={options.onSelectOpenAppId}
+        onClose={options.onExitEditor}
+        onInsertText={options.onInsertComposerText}
+      />
+    ) : null;
+
   const planPanelNode = <PlanPanel plan={options.plan} isProcessing={options.isProcessing} />;
 
   const terminalPanelNode = options.terminalState ? (
@@ -937,6 +958,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     tabBarNode,
     gitDiffPanelNode,
     gitDiffViewerNode,
+    fileViewPanelNode,
     planPanelNode,
     debugPanelNode,
     debugPanelFullNode,

@@ -12,9 +12,10 @@ type DesktopLayoutProps = {
   showKanban: boolean;
   kanbanNode: ReactNode;
   topbarLeftNode: ReactNode;
-  centerMode: "chat" | "diff";
+  centerMode: "chat" | "diff" | "editor";
   messagesNode: ReactNode;
   gitDiffViewerNode: ReactNode;
+  fileViewPanelNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   planPanelNode: ReactNode;
   composerNode: ReactNode;
@@ -40,6 +41,7 @@ export function DesktopLayout({
   centerMode,
   messagesNode,
   gitDiffViewerNode,
+  fileViewPanelNode,
   gitDiffPanelNode,
   planPanelNode,
   composerNode,
@@ -52,35 +54,36 @@ export function DesktopLayout({
 }: DesktopLayoutProps) {
   const diffLayerRef = useRef<HTMLDivElement | null>(null);
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
+  const editorLayerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const diffLayer = diffLayerRef.current;
     const chatLayer = chatLayerRef.current;
+    const editorLayer = editorLayerRef.current;
 
-    if (diffLayer) {
-      if (centerMode === "diff") {
-        diffLayer.removeAttribute("inert");
+    const layers = [
+      { ref: diffLayer, mode: "diff" as const },
+      { ref: chatLayer, mode: "chat" as const },
+      { ref: editorLayer, mode: "editor" as const },
+    ];
+
+    for (const { ref, mode } of layers) {
+      if (!ref) continue;
+      if (centerMode === mode) {
+        ref.removeAttribute("inert");
       } else {
-        diffLayer.setAttribute("inert", "");
+        ref.setAttribute("inert", "");
       }
     }
 
-    if (chatLayer) {
-      if (centerMode === "chat") {
-        chatLayer.removeAttribute("inert");
-      } else {
-        chatLayer.setAttribute("inert", "");
-      }
-    }
-
-    const hiddenLayer = centerMode === "diff" ? chatLayer : diffLayer;
     const activeElement = document.activeElement;
-    if (
-      hiddenLayer &&
-      activeElement instanceof HTMLElement &&
-      hiddenLayer.contains(activeElement)
-    ) {
-      activeElement.blur();
+    if (activeElement instanceof HTMLElement) {
+      for (const { ref, mode } of layers) {
+        if (ref && mode !== centerMode && ref.contains(activeElement)) {
+          activeElement.blur();
+          break;
+        }
+      }
     }
   }, [centerMode]);
 
@@ -119,6 +122,13 @@ export function DesktopLayout({
                 ref={diffLayerRef}
               >
                 {gitDiffViewerNode}
+              </div>
+              <div
+                className={`content-layer ${centerMode === "editor" ? "is-active" : "is-hidden"}`}
+                aria-hidden={centerMode !== "editor"}
+                ref={editorLayerRef}
+              >
+                {fileViewPanelNode}
               </div>
               <div
                 className={`content-layer ${centerMode === "chat" ? "is-active" : "is-hidden"}`}

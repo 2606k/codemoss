@@ -2,94 +2,99 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { AppMode, WorkspaceInfo } from "../../../types";
+import type { KanbanPanel } from "../types";
 import { KanbanModeToggle } from "./KanbanModeToggle";
-
-type WorkspaceGroupSection = {
-  id: string | null;
-  name: string;
-  workspaces: WorkspaceInfo[];
-};
 
 type KanbanBoardHeaderProps = {
   workspace: WorkspaceInfo;
+  workspaces: WorkspaceInfo[];
+  panel: KanbanPanel;
+  panels: KanbanPanel[];
   onBack: () => void;
   onAppModeChange: (mode: AppMode) => void;
-  groupedWorkspaces?: WorkspaceGroupSection[];
-  activeWorkspaceId?: string | null;
-  onSelectWorkspace?: (workspaceId: string) => void;
+  onSelectWorkspace: (workspaceId: string) => void;
+  onSelectPanel: (panelId: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
 };
 
 export function KanbanBoardHeader({
   workspace,
+  workspaces,
+  panel,
+  panels,
   onBack,
   onAppModeChange,
-  groupedWorkspaces,
-  activeWorkspaceId,
   onSelectWorkspace,
+  onSelectPanel,
   searchQuery,
   onSearchChange,
 }: KanbanBoardHeaderProps) {
   const { t } = useTranslation();
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [projectQuery, setProjectQuery] = useState("");
-  const projectMenuRef = useRef<HTMLDivElement | null>(null);
+  const [panelMenuOpen, setPanelMenuOpen] = useState(false);
+  const [panelQuery, setPanelQuery] = useState("");
+  const panelMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // 判断是否显示项目选择菜单
-  const showProjectMenu = Boolean(
-    groupedWorkspaces &&
-    groupedWorkspaces.length > 0 &&
-    onSelectWorkspace
-  );
+  const [wsMenuOpen, setWsMenuOpen] = useState(false);
+  const [wsQuery, setWsQuery] = useState("");
+  const wsMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // 项目搜索过滤
-  const trimmedProjectQuery = projectQuery.trim();
-  const lowercaseProjectQuery = trimmedProjectQuery.toLowerCase();
-  const filteredGroups = useMemo(() => {
-    if (!groupedWorkspaces) {
-      return [];
-    }
-    if (trimmedProjectQuery.length === 0) {
-      return groupedWorkspaces;
-    }
-    return groupedWorkspaces
-      .map((group) => ({
-        ...group,
-        workspaces: group.workspaces.filter((ws) =>
-          ws.name.toLowerCase().includes(lowercaseProjectQuery)
-        ),
-      }))
-      .filter((group) => group.workspaces.length > 0);
-  }, [groupedWorkspaces, lowercaseProjectQuery, trimmedProjectQuery]);
+  const showPanelMenu = panels.length > 1;
+  const showWsMenu = workspaces.length > 1;
 
-  // 处理项目选择
-  const handleSelectProject = (workspaceId: string) => {
-    if (onSelectWorkspace) {
-      onSelectWorkspace(workspaceId);
-      setProjectMenuOpen(false);
-      setProjectQuery("");
-    }
+  const trimmedQuery = panelQuery.trim().toLowerCase();
+  const filteredPanels = useMemo(() => {
+    if (trimmedQuery.length === 0) return panels;
+    return panels.filter((p) =>
+      p.name.toLowerCase().includes(trimmedQuery)
+    );
+  }, [panels, trimmedQuery]);
+
+  const trimmedWsQuery = wsQuery.trim().toLowerCase();
+  const filteredWorkspaces = useMemo(() => {
+    if (trimmedWsQuery.length === 0) return workspaces;
+    return workspaces.filter((w) =>
+      w.name.toLowerCase().includes(trimmedWsQuery)
+    );
+  }, [workspaces, trimmedWsQuery]);
+
+  const handleSelectPanel = (panelId: string) => {
+    onSelectPanel(panelId);
+    setPanelMenuOpen(false);
+    setPanelQuery("");
   };
 
-  // 外部点击关闭
+  const handleSelectWorkspace = (workspaceId: string) => {
+    onSelectWorkspace(workspaceId);
+    setWsMenuOpen(false);
+    setWsQuery("");
+  };
+
   useEffect(() => {
-    if (!projectMenuOpen) {
-      return;
-    }
+    if (!panelMenuOpen) return;
     const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
-      const projectMenuContains = projectMenuRef.current?.contains(target) ?? false;
-      if (!projectMenuContains) {
-        setProjectMenuOpen(false);
-        setProjectQuery("");
+      if (!(panelMenuRef.current?.contains(target) ?? false)) {
+        setPanelMenuOpen(false);
+        setPanelQuery("");
       }
     };
     window.addEventListener("mousedown", handleClick);
-    return () => {
-      window.removeEventListener("mousedown", handleClick);
+    return () => window.removeEventListener("mousedown", handleClick);
+  }, [panelMenuOpen]);
+
+  useEffect(() => {
+    if (!wsMenuOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!(wsMenuRef.current?.contains(target) ?? false)) {
+        setWsMenuOpen(false);
+        setWsQuery("");
+      }
     };
-  }, [projectMenuOpen]);
+    window.addEventListener("mousedown", handleClick);
+    return () => window.removeEventListener("mousedown", handleClick);
+  }, [wsMenuOpen]);
 
   return (
     <div className="kanban-board-header">
@@ -102,59 +107,52 @@ export function KanbanBoardHeader({
         >
           <ArrowLeft size={18} />
         </button>
-        {showProjectMenu ? (
-          <div className="kanban-project-menu" ref={projectMenuRef}>
+        {showWsMenu ? (
+          <div className="kanban-project-menu" ref={wsMenuRef}>
             <button
               type="button"
               className="kanban-project-button"
-              onClick={() => setProjectMenuOpen((prev) => !prev)}
+              onClick={() => setWsMenuOpen((prev) => !prev)}
               aria-haspopup="menu"
-              aria-expanded={projectMenuOpen}
+              aria-expanded={wsMenuOpen}
             >
-              <h2 className="kanban-board-title">{workspace.name}</h2>
+              <span className="kanban-breadcrumb-workspace">{workspace.name}</span>
               <span className="kanban-project-caret" aria-hidden>
                 ›
               </span>
             </button>
-            {projectMenuOpen && (
+            {wsMenuOpen && (
               <div
                 className="kanban-project-dropdown popover-surface"
                 role="menu"
               >
                 <div className="project-search">
                   <input
-                    value={projectQuery}
-                    onChange={(event) => setProjectQuery(event.target.value)}
-                    placeholder={t("workspace.searchProjects")}
+                    value={wsQuery}
+                    onChange={(e) => setWsQuery(e.target.value)}
+                    placeholder={t("kanban.workspace.searchWorkspaces")}
                     className="branch-input"
                     autoFocus
-                    aria-label={t("workspace.searchProjects")}
+                    aria-label={t("kanban.workspace.searchWorkspaces")}
                   />
                 </div>
                 <div className="project-list" role="none">
-                  {filteredGroups.map((group) => (
-                    <div key={group.id ?? "ungrouped"}>
-                      {group.name && (
-                        <div className="project-group-label">{group.name}</div>
-                      )}
-                      {group.workspaces.map((ws) => (
-                        <button
-                          key={ws.id}
-                          type="button"
-                          className={`project-item${
-                            ws.id === activeWorkspaceId ? " is-active" : ""
-                          }`}
-                          onClick={() => handleSelectProject(ws.id)}
-                          role="menuitem"
-                        >
-                          {ws.name}
-                        </button>
-                      ))}
-                    </div>
+                  {filteredWorkspaces.map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      className={`project-item${
+                        w.id === workspace.id ? " is-active" : ""
+                      }`}
+                      onClick={() => handleSelectWorkspace(w.id)}
+                      role="menuitem"
+                    >
+                      {w.name}
+                    </button>
                   ))}
-                  {filteredGroups.length === 0 && (
+                  {filteredWorkspaces.length === 0 && (
                     <div className="project-empty">
-                      {t("workspace.noProjectsFound")}
+                      {t("kanban.workspace.noWorkspacesFound")}
                     </div>
                   )}
                 </div>
@@ -162,7 +160,63 @@ export function KanbanBoardHeader({
             )}
           </div>
         ) : (
-          <h2 className="kanban-board-title">{workspace.name}</h2>
+          <span className="kanban-breadcrumb-workspace">{workspace.name}</span>
+        )}
+        <span className="kanban-breadcrumb-sep" aria-hidden>›</span>
+        {showPanelMenu ? (
+          <div className="kanban-project-menu" ref={panelMenuRef}>
+            <button
+              type="button"
+              className="kanban-project-button"
+              onClick={() => setPanelMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={panelMenuOpen}
+            >
+              <h2 className="kanban-board-title">{panel.name}</h2>
+              <span className="kanban-project-caret" aria-hidden>
+                ›
+              </span>
+            </button>
+            {panelMenuOpen && (
+              <div
+                className="kanban-project-dropdown popover-surface"
+                role="menu"
+              >
+                <div className="project-search">
+                  <input
+                    value={panelQuery}
+                    onChange={(e) => setPanelQuery(e.target.value)}
+                    placeholder={t("kanban.panel.searchPanels")}
+                    className="branch-input"
+                    autoFocus
+                    aria-label={t("kanban.panel.searchPanels")}
+                  />
+                </div>
+                <div className="project-list" role="none">
+                  {filteredPanels.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`project-item${
+                        p.id === panel.id ? " is-active" : ""
+                      }`}
+                      onClick={() => handleSelectPanel(p.id)}
+                      role="menuitem"
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                  {filteredPanels.length === 0 && (
+                    <div className="project-empty">
+                      {t("kanban.panel.noPanelsFound")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <h2 className="kanban-board-title">{panel.name}</h2>
         )}
       </div>
       <div className="kanban-board-header-center">
