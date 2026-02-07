@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react";
 import {
   isGlassSupported,
   setLiquidGlassEffect,
-  GlassMaterialVariant,
 } from "tauri-plugin-liquid-glass-api";
-import { Effect, EffectState, getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { DebugEntry } from "../../../types";
 
 type Params = {
