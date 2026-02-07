@@ -1073,6 +1073,50 @@ const zh = {
     inputRequested: "请求输入",
   },
 
+  // 看板
+  kanban: {
+    mode: {
+      chat: "对话模式",
+      kanban: "看板模式",
+    },
+    columns: {
+      todo: "待办",
+      inprogress: "进行中",
+      testing: "审查中",
+      done: "完成",
+      cancelled: "取消",
+    },
+    projects: {
+      title: "项目",
+      subtitle: "选择一个工作区来管理任务",
+      empty: "暂无工作区",
+      emptyHint: "添加一个工作区来开始管理任务",
+      taskCount: "{{count}} 个任务",
+    },
+    board: {
+      back: "返回",
+      addTask: "添加",
+    },
+    task: {
+      createTitle: "创建任务",
+      create: "创建",
+      titlePlaceholder: "输入任务标题",
+      descPlaceholder: "描述任务内容...",
+      notInstalled: "未安装",
+      noModels: "无模型",
+      addImage: "添加图片",
+      start: "开始",
+      menu: "任务菜单",
+      edit: "编辑",
+      delete: "删除",
+      linked: "已关联",
+      processing: "处理中...",
+    },
+    conversation: {
+      close: "关闭",
+    },
+  },
+
   // 使用量标签
   usage: {
     sessionReset: "会话重置于",

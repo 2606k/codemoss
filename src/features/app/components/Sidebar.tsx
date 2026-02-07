@@ -1,5 +1,6 @@
 import type {
   AccountSnapshot,
+  AppMode,
   RateLimitSnapshot,
   ThreadSummary,
   WorkspaceInfo,
@@ -91,6 +92,8 @@ type SidebarProps = {
   onWorkspaceDragEnter: (event: React.DragEvent<HTMLElement>) => void;
   onWorkspaceDragLeave: (event: React.DragEvent<HTMLElement>) => void;
   onWorkspaceDrop: (event: React.DragEvent<HTMLElement>) => void;
+  appMode: AppMode;
+  onAppModeChange: (mode: AppMode) => void;
 };
 
 export function Sidebar({
@@ -146,6 +149,8 @@ export function Sidebar({
   onWorkspaceDragEnter,
   onWorkspaceDragLeave,
   onWorkspaceDrop,
+  appMode,
+  onAppModeChange,
 }: SidebarProps) {
   const { t } = useTranslation();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(
@@ -408,6 +413,8 @@ export function Sidebar({
         onAddWorkspace={onAddWorkspace}
         onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
         isSearchOpen={isSearchOpen}
+        appMode={appMode}
+        onAppModeChange={onAppModeChange}
       />
       <div className={`sidebar-search${isSearchOpen ? " is-open" : ""}`}>
         {isSearchOpen && (

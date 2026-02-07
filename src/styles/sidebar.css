@@ -88,23 +88,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 4px 4px 8px;
+  padding: 12px 8px 4px 8px;
   margin-bottom: 0;
   -webkit-app-region: no-drag;
-}
-
-.sidebar-header-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.sidebar-title-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
 }
 
 .sidebar-title-button {
@@ -118,7 +104,9 @@
   padding: 2px 5px;
   border-radius: 4px;
   font-weight: 500;
-  opacity: 0.9;
+  opacity: 0.8;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .sidebar-title-add {

@@ -79,7 +79,7 @@ export function EngineSelector({
   };
 
   return (
-    <div className="composer-select-wrap">
+    <div className="composer-select-wrap" title={selectedEngineInfo?.shortName || selectedEngine}>
       <span className="composer-icon" aria-hidden>
         <EngineIcon engine={selectedEngine} size={16} />
       </span>

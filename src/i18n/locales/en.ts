@@ -1073,6 +1073,50 @@ const en = {
     inputRequested: "Input requested",
   },
 
+  // Kanban
+  kanban: {
+    mode: {
+      chat: "Chat Mode",
+      kanban: "Kanban Mode",
+    },
+    columns: {
+      todo: "To Do",
+      inprogress: "In Progress",
+      testing: "In Review",
+      done: "Done",
+      cancelled: "Cancelled",
+    },
+    projects: {
+      title: "Projects",
+      subtitle: "Select a workspace to manage tasks",
+      empty: "No workspaces yet",
+      emptyHint: "Add a workspace to start managing tasks",
+      taskCount: "{{count}} tasks",
+    },
+    board: {
+      back: "Back",
+      addTask: "Add",
+    },
+    task: {
+      createTitle: "Create Task",
+      create: "Create",
+      titlePlaceholder: "Enter task title",
+      descPlaceholder: "Describe the task...",
+      notInstalled: "Not installed",
+      noModels: "No models",
+      addImage: "Add Image",
+      start: "Start",
+      menu: "Task menu",
+      edit: "Edit",
+      delete: "Delete",
+      linked: "Linked",
+      processing: "Processing...",
+    },
+    conversation: {
+      close: "Close",
+    },
+  },
+
   // Usage labels
   usage: {
     sessionReset: "Session resets",

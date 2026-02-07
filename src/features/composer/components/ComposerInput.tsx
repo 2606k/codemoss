@@ -463,7 +463,7 @@ export function ComposerInput({
             )}
             
             {models && selectedModelId && onSelectModel && (
-              <div className="composer-select-wrap">
+              <div className="composer-select-wrap" title={selectedModel?.displayName || selectedModel?.model || selectedModelId}>
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path
@@ -512,7 +512,7 @@ export function ComposerInput({
             )}
             
             {accessMode && onSelectAccessMode && (
-              <div className="composer-select-wrap">
+              <div className="composer-select-wrap" title={t("composer.fullAccess")}>
                 <span className="composer-icon" aria-hidden>
                   <Lock size={14} />
                 </span>
@@ -536,7 +536,11 @@ export function ComposerInput({
             )}
             
             {collaborationModes.length > 0 && onSelectCollaborationMode && (
-              <div className="composer-select-wrap">
+              <div className="composer-select-wrap" title={formatCollaborationModeLabel(
+                collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
+                selectedCollaborationModeId ||
+                ""
+              )}>
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path
@@ -574,7 +578,7 @@ export function ComposerInput({
             
             {/* 思考模式选择器 - Claude Code 不支持此功能，仅 Codex 等引擎支持 */}
             {selectedEngine !== "claude" && reasoningSupported && onSelectEffort && (
-              <div className="composer-select-wrap">
+              <div className="composer-select-wrap" title={selectedEffort || t("composer.effortDefault")}>
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path

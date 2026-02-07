@@ -115,6 +115,7 @@ export type ReviewTarget =
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type AppMode = "chat" | "kanban";
 
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";

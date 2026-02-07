@@ -9,6 +9,8 @@ type DesktopLayoutProps = {
   homeNode: ReactNode;
   showHome: boolean;
   showWorkspace: boolean;
+  showKanban: boolean;
+  kanbanNode: ReactNode;
   topbarLeftNode: ReactNode;
   centerMode: "chat" | "diff";
   messagesNode: ReactNode;
@@ -32,6 +34,8 @@ export function DesktopLayout({
   homeNode,
   showHome,
   showWorkspace,
+  showKanban,
+  kanbanNode,
   topbarLeftNode,
   centerMode,
   messagesNode,
@@ -79,6 +83,14 @@ export function DesktopLayout({
       activeElement.blur();
     }
   }, [centerMode]);
+
+  if (showKanban) {
+    return (
+      <section className="main kanban-fullscreen">
+        {kanbanNode}
+      </section>
+    );
+  }
 
   return (
     <>

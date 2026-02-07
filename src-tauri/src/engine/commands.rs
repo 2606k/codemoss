@@ -119,9 +119,20 @@ pub async fn get_engine_models(
             }
         }
         EngineType::Codex => {
-            // Codex models should be fetched via model_list command through workspace session
-            // Return empty for now - frontend should use model_list for Codex
-            Ok(Vec::new())
+            if let Some(status) = manager.get_engine_status(EngineType::Codex).await {
+                Ok(status.models)
+            } else {
+                let statuses = manager.detect_engines().await;
+                let codex_status = statuses
+                    .into_iter()
+                    .find(|s| s.engine_type == EngineType::Codex);
+
+                if let Some(status) = codex_status {
+                    Ok(status.models)
+                } else {
+                    Err("Codex not detected".to_string())
+                }
+            }
         }
         _ => Err(format!("{} is not supported yet", engine_type.display_name())),
     }

@@ -7,6 +7,8 @@ type AppLayoutProps = {
   isPhone: boolean;
   isTablet: boolean;
   showHome: boolean;
+  showKanban: boolean;
+  kanbanNode: ReactNode;
   showGitDetail: boolean;
   activeTab: "projects" | "codex" | "git" | "log";
   tabletTab: "codex" | "git" | "log";
@@ -42,6 +44,8 @@ export const AppLayout = memo(function AppLayout({
   isPhone,
   isTablet,
   showHome,
+  showKanban,
+  kanbanNode,
   showGitDetail,
   activeTab,
   tabletTab,
@@ -127,7 +131,9 @@ export const AppLayout = memo(function AppLayout({
       errorToastsNode={errorToastsNode}
       homeNode={homeNode}
       showHome={showHome}
-      showWorkspace={activeWorkspace && !showHome}
+      showWorkspace={activeWorkspace && !showHome && !showKanban}
+      showKanban={showKanban}
+      kanbanNode={kanbanNode}
       topbarLeftNode={desktopTopbarLeftNode}
       centerMode={centerMode}
       messagesNode={messagesNode}

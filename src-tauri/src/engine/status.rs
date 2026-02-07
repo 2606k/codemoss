@@ -186,16 +186,17 @@ pub async fn detect_codex_status(custom_bin: Option<&str>) -> EngineStatus {
     // Get home directory
     let home_dir = get_codex_home_dir();
 
-    // Models will be fetched dynamically via app-server
-    // For now, return empty and let the frontend fetch via model_list command
+    let models = get_codex_models();
+    let default_model = models.iter().find(|m| m.default).map(|m| m.id.clone());
+
     EngineStatus {
         engine_type: EngineType::Codex,
         installed: true,
         version,
         bin_path: Some(bin.to_string()),
         home_dir: home_dir.map(|p| p.to_string_lossy().to_string()),
-        models: Vec::new(), // Fetched dynamically
-        default_model: None,
+        models,
+        default_model,
         features: EngineFeatures::codex(),
         error: None,
     }
@@ -209,6 +210,23 @@ fn get_claude_home_dir() -> Option<PathBuf> {
 /// Get Codex home directory
 fn get_codex_home_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".codex"))
+}
+
+/// Get Codex CLI available models (hardcoded as they don't change frequently)
+fn get_codex_models() -> Vec<ModelInfo> {
+    vec![
+        ModelInfo::new("gpt-5.3-codex", "GPT-5.3 Codex")
+            .as_default()
+            .with_provider("openai"),
+        ModelInfo::new("gpt-5.2-codex", "GPT-5.2 Codex")
+            .with_provider("openai"),
+        ModelInfo::new("gpt-5.2", "GPT-5.2")
+            .with_provider("openai"),
+        ModelInfo::new("gpt-5.1-codex-max", "GPT-5.1 Codex Max")
+            .with_provider("openai"),
+        ModelInfo::new("gpt-5.1-codex-mini", "GPT-5.1 Codex Mini")
+            .with_provider("openai"),
+    ]
 }
 
 /// Get Claude Code available models (hardcoded as they don't change frequently)

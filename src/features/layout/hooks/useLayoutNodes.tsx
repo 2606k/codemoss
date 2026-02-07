@@ -22,6 +22,7 @@ import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/us
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
 import type {
   AccessMode,
+  AppMode,
   ApprovalRequest,
   BranchInfo,
   CollaborationModeOption,
@@ -172,6 +173,8 @@ type LayoutNodesOptions = {
   onWorkspaceDragEnter: (event: DragEvent<HTMLElement>) => void;
   onWorkspaceDragLeave: (event: DragEvent<HTMLElement>) => void;
   onWorkspaceDrop: (event: DragEvent<HTMLElement>) => void;
+  appMode: AppMode;
+  onAppModeChange: (mode: AppMode) => void;
   updaterState: UpdateState;
   onUpdate: () => void;
   onDismissUpdate: () => void;
@@ -510,6 +513,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onWorkspaceDragEnter={options.onWorkspaceDragEnter}
       onWorkspaceDragLeave={options.onWorkspaceDragLeave}
       onWorkspaceDrop={options.onWorkspaceDrop}
+      appMode={options.appMode}
+      onAppModeChange={options.onAppModeChange}
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}

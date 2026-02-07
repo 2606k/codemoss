@@ -79,6 +79,8 @@ const baseProps = {
   onWorkspaceDragEnter: vi.fn(),
   onWorkspaceDragLeave: vi.fn(),
   onWorkspaceDrop: vi.fn(),
+  appMode: "chat" as const,
+  onAppModeChange: vi.fn(),
 };
 
 describe("Sidebar", () => {

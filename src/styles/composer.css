@@ -143,12 +143,16 @@
   align-items: center;
   justify-content: space-between;
   margin-top: 4px;
+  container-type: inline-size;
+  container-name: composer-footer;
 }
 
 .composer-input-footer-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .composer-input-footer-right {
@@ -943,4 +947,35 @@
 .composer-select:focus {
   outline: none;
   color: var(--text-strong);
+}
+
+/* 小屏/窄容器：隐藏选择器文字，只保留 icon */
+@container composer-footer (max-width: 460px) {
+  .composer-select-value {
+    display: none;
+  }
+
+  .composer-select-wrap {
+    padding: 2px 4px;
+    gap: 0;
+  }
+
+  .composer-select {
+    padding: 2px 0;
+    width: 0;
+    min-width: 0;
+  }
+
+  .composer-select--model,
+  .composer-select--collab,
+  .composer-select--effort,
+  .composer-select--access,
+  .composer-select--engine {
+    width: auto;
+    max-width: none;
+  }
+
+  .composer-input-footer-left {
+    gap: 4px;
+  }
 }

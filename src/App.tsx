@@ -31,6 +31,7 @@ import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import "./styles/tool-blocks.css";
 import "./styles/status-panel.css";
+import "./styles/kanban.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
@@ -96,6 +97,9 @@ import { useLiquidGlassEffect } from "./features/app/hooks/useLiquidGlassEffect"
 import { useCopyThread } from "./features/threads/hooks/useCopyThread";
 import { useTerminalController } from "./features/terminal/hooks/useTerminalController";
 import { useWorkspaceLaunchScript } from "./features/app/hooks/useWorkspaceLaunchScript";
+import { useKanbanStore } from "./features/kanban/hooks/useKanbanStore";
+import { KanbanView } from "./features/kanban/components/KanbanView";
+import type { KanbanTask } from "./features/kanban/types";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
@@ -413,7 +417,21 @@ function MainApp() {
     installedEngines,
     setActiveEngine,
     engineModelsAsOptions,
+    engineStatuses,
   } = useEngineController({ activeWorkspace, onDebug: addDebugEntry });
+
+  // --- Kanban mode ---
+  const [appMode, setAppMode] = useState<import("./types").AppMode>("chat");
+  const {
+    tasks: kanbanTasks,
+    kanbanViewState,
+    setKanbanViewState,
+    createTask: kanbanCreateTask,
+    updateTask: kanbanUpdateTask,
+    deleteTask: kanbanDeleteTask,
+    reorderTask: kanbanReorderTask,
+  } = useKanbanStore();
+
   const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
     useState<Partial<Record<EngineType, string | null>>>({});
 
@@ -1084,7 +1102,9 @@ function MainApp() {
   const hasActivePlan = Boolean(
     activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
   );
-  const showHome = !activeWorkspace;
+  const showKanban = appMode === "kanban";
+  const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
+  const showHome = !activeWorkspace && !showKanban;
   const showWorkspaceHome = Boolean(activeWorkspace && !activeThreadId);
   const canInterrupt = activeThreadId
     ? threadStatusById[activeThreadId]?.isProcessing ?? false
@@ -1551,6 +1571,225 @@ function MainApp() {
     ],
   );
 
+  // --- Kanban conversation handlers ---
+  const handleOpenTaskConversation = useCallback(
+    async (task: KanbanTask) => {
+      setSelectedKanbanTaskId(task.id);
+      const workspace = workspacesById.get(task.workspaceId);
+      if (!workspace) return;
+
+      await connectWorkspace(workspace);
+      selectWorkspace(task.workspaceId);
+
+      const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
+      setActiveEngine(engine);
+
+      if (task.threadId) {
+        let resolvedThreadId = task.threadId;
+        // If the stored threadId is a stale claude-pending-* that was already renamed,
+        // resolve to the new ID by checking threadsByWorkspace.
+        if (
+          resolvedThreadId.startsWith("claude-pending-") &&
+          !threadStatusById[resolvedThreadId]
+        ) {
+          const threads = threadsByWorkspace[task.workspaceId] ?? [];
+          const otherTaskThreadIds = new Set(
+            kanbanTasks
+              .filter((t) => t.id !== task.id && t.threadId && !t.threadId.startsWith("claude-pending-"))
+              .map((t) => t.threadId as string)
+          );
+          const match = threads.find(
+            (t) => t.id.startsWith("claude:") && !otherTaskThreadIds.has(t.id)
+          );
+          if (match) {
+            resolvedThreadId = match.id;
+            kanbanUpdateTask(task.id, { threadId: resolvedThreadId });
+          }
+        }
+        setActiveThreadId(resolvedThreadId, task.workspaceId);
+      } else {
+        const threadId = await startThreadForWorkspace(task.workspaceId, { engine });
+        if (threadId) {
+          kanbanUpdateTask(task.id, { threadId });
+          setActiveThreadId(threadId, task.workspaceId);
+        }
+      }
+    },
+    [
+      workspacesById,
+      connectWorkspace,
+      selectWorkspace,
+      setActiveThreadId,
+      startThreadForWorkspace,
+      kanbanUpdateTask,
+      activeEngine,
+      setActiveEngine,
+      threadStatusById,
+      threadsByWorkspace,
+      kanbanTasks,
+    ]
+  );
+
+  const handleCloseTaskConversation = useCallback(() => {
+    setSelectedKanbanTaskId(null);
+  }, []);
+
+  const handleKanbanCreateTask = useCallback(
+    (input: Parameters<typeof kanbanCreateTask>[0]) => {
+      const task = kanbanCreateTask(input);
+      if (input.autoStart) {
+        // Auto-execute: create thread and send first message (without opening conversation panel)
+        const executeAutoStart = async () => {
+          const workspace = workspacesById.get(task.workspaceId);
+          if (!workspace) return;
+
+          await connectWorkspace(workspace);
+          selectWorkspace(task.workspaceId);
+
+          const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
+          const threadId = await startThreadForWorkspace(task.workspaceId, { engine });
+          if (!threadId) return;
+          kanbanUpdateTask(task.id, { threadId });
+          setActiveThreadId(threadId, task.workspaceId);
+
+          // Send task description (or title if no description) as first message
+          const firstMessage = task.description?.trim() || task.title;
+          if (firstMessage) {
+            // Small delay to let activeWorkspace state settle after selectWorkspace
+            await new Promise((r) => setTimeout(r, 100));
+            await sendUserMessageToThread(workspace, threadId, firstMessage, task.images ?? []);
+          }
+        };
+        executeAutoStart().catch((err) => {
+          console.error("[kanban] autoStart execute failed:", err);
+        });
+      }
+      return task;
+    },
+    [
+      kanbanCreateTask,
+      kanbanUpdateTask,
+      workspacesById,
+      connectWorkspace,
+      selectWorkspace,
+      activeEngine,
+      startThreadForWorkspace,
+      setActiveThreadId,
+      sendUserMessageToThread,
+    ]
+  );
+
+  // Sync kanban task threadIds when Claude renames pending → session.
+  // Must cover ALL tasks (not just selected) because background tasks get renamed too.
+  useEffect(() => {
+    const usedNewIds = new Set<string>();
+    for (const task of kanbanTasks) {
+      if (!task.threadId || !task.threadId.startsWith("claude-pending-")) continue;
+      // If the old ID still exists in the thread system, no rename happened yet
+      if (threadStatusById[task.threadId] !== undefined) continue;
+      // Thread was renamed — find the new ID from threadsByWorkspace
+      const threads = threadsByWorkspace[task.workspaceId] ?? [];
+      const otherTaskThreadIds = new Set(
+        kanbanTasks
+          .filter((t) => t.id !== task.id && t.threadId && !t.threadId.startsWith("claude-pending-"))
+          .map((t) => t.threadId as string)
+      );
+      const newThread = threads.find(
+        (t) =>
+          t.id.startsWith("claude:") &&
+          !otherTaskThreadIds.has(t.id) &&
+          !usedNewIds.has(t.id)
+      );
+      if (newThread) {
+        usedNewIds.add(newThread.id);
+        kanbanUpdateTask(task.id, { threadId: newThread.id });
+      }
+    }
+  }, [kanbanTasks, threadStatusById, threadsByWorkspace, kanbanUpdateTask]);
+
+  useEffect(() => {
+    if (appMode !== "kanban") {
+      setSelectedKanbanTaskId(null);
+    }
+  }, [appMode]);
+
+  // Compute which kanban tasks are currently processing (AI responding)
+  const taskProcessingMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const task of kanbanTasks) {
+      if (task.threadId) {
+        map[task.id] = threadStatusById[task.threadId]?.isProcessing ?? false;
+      }
+    }
+    return map;
+  }, [kanbanTasks, threadStatusById]);
+
+  // Track previous processing state to detect transitions
+  const prevProcessingMapRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    const prev = prevProcessingMapRef.current;
+    for (const task of kanbanTasks) {
+      const wasProcessing = prev[task.id] ?? false;
+      const nowProcessing = taskProcessingMap[task.id] ?? false;
+      if (wasProcessing === nowProcessing) continue;
+
+      // AI finished processing (true → false): auto-move inprogress → testing
+      if (wasProcessing && !nowProcessing && task.status === "inprogress") {
+        kanbanUpdateTask(task.id, { status: "testing" });
+      }
+      // User sent follow-up (false → true): auto-move testing → inprogress
+      if (!wasProcessing && nowProcessing && task.status === "testing") {
+        kanbanUpdateTask(task.id, { status: "inprogress" });
+      }
+    }
+    prevProcessingMapRef.current = { ...taskProcessingMap };
+  }, [taskProcessingMap, kanbanTasks, kanbanUpdateTask]);
+
+  // Drag to "inprogress" auto-execute: create thread and send first message (without opening conversation panel)
+  const handleDragToInProgress = useCallback(
+    (task: KanbanTask) => {
+      // Auto-execute regardless of existing threadId — reuse thread if present
+      const executeTask = async () => {
+        const workspace = workspacesById.get(task.workspaceId);
+        if (!workspace) return;
+
+        await connectWorkspace(workspace);
+        selectWorkspace(task.workspaceId);
+
+        const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
+        setActiveEngine(engine);
+
+        let threadId = task.threadId;
+        if (!threadId) {
+          threadId = await startThreadForWorkspace(task.workspaceId, { engine });
+          if (!threadId) return;
+          kanbanUpdateTask(task.id, { threadId });
+        }
+        setActiveThreadId(threadId, task.workspaceId);
+
+        const firstMessage = task.description?.trim() || task.title;
+        if (firstMessage) {
+          await new Promise((r) => setTimeout(r, 100));
+          await sendUserMessageToThread(workspace, threadId, firstMessage, task.images ?? []);
+        }
+      };
+      executeTask().catch((err) => {
+        console.error("[kanban] drag-to-inprogress auto-execute failed:", err);
+      });
+    },
+    [
+      workspacesById,
+      connectWorkspace,
+      selectWorkspace,
+      activeEngine,
+      setActiveEngine,
+      startThreadForWorkspace,
+      setActiveThreadId,
+      kanbanUpdateTask,
+      sendUserMessageToThread,
+    ]
+  );
+
   const orderValue = (entry: WorkspaceInfo) =>
     typeof entry.settings.sortOrder === "number"
       ? entry.settings.sortOrder
@@ -1664,7 +1903,7 @@ function MainApp() {
     reduceTransparency ? " reduced-transparency" : ""
   }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
-  }`;
+  }${showKanban ? " kanban-active" : ""}`;
   const {
     sidebarNode,
     messagesNode,
@@ -2113,6 +2352,8 @@ function MainApp() {
     onWorkspaceDragEnter: handleWorkspaceDragEnter,
     onWorkspaceDragLeave: handleWorkspaceDragLeave,
     onWorkspaceDrop: handleWorkspaceDrop,
+    appMode,
+    onAppModeChange: setAppMode,
   });
 
   const workspaceHomeNode = activeWorkspace ? (
@@ -2197,6 +2438,13 @@ function MainApp() {
 
   const mainMessagesNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
 
+  const kanbanConversationNode = selectedKanbanTaskId ? (
+    <div className="kanban-conversation-content">
+      {messagesNode}
+      {composerNode}
+    </div>
+  ) : null;
+
   const desktopTopbarLeftNodeWithToggle = !isCompact ? (
     <div className="topbar-leading">
       <SidebarCollapseButton {...sidebarToggleProps} />
@@ -2247,6 +2495,30 @@ function MainApp() {
         isPhone={isPhone}
         isTablet={isTablet}
         showHome={showHome}
+        showKanban={showKanban}
+        kanbanNode={
+          showKanban ? (
+            <KanbanView
+              viewState={kanbanViewState}
+              onViewStateChange={setKanbanViewState}
+              workspaces={workspaces}
+              tasks={kanbanTasks}
+              onCreateTask={handleKanbanCreateTask}
+              onUpdateTask={kanbanUpdateTask}
+              onDeleteTask={kanbanDeleteTask}
+              onReorderTask={kanbanReorderTask}
+              onAddWorkspace={handleAddWorkspace}
+              onAppModeChange={setAppMode}
+              engineStatuses={engineStatuses}
+              conversationNode={kanbanConversationNode}
+              selectedTaskId={selectedKanbanTaskId}
+              taskProcessingMap={taskProcessingMap}
+              onOpenTaskConversation={handleOpenTaskConversation}
+              onCloseTaskConversation={handleCloseTaskConversation}
+              onDragToInProgress={handleDragToInProgress}
+            />
+          ) : null
+        }
         showGitDetail={showGitDetail}
         activeTab={activeTab}
         tabletTab={tabletTab}
