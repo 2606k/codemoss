@@ -2,6 +2,7 @@ import { lazy, memo, Suspense, useEffect, useRef, useState, type ReactNode, type
 import ReactMarkdown, { type Components } from "react-markdown";
 import { useTranslation } from "react-i18next";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const MermaidBlock = lazy(() => import("./MermaidBlock"));
@@ -435,6 +436,7 @@ export const Markdown = memo(function Markdown({
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkFileLinks]}
+        rehypePlugins={[rehypeRaw]}
         urlTransform={(url) => {
           const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url);
           if (
