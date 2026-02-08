@@ -78,7 +78,18 @@ const zh = {
     signIn: "登录",
     account: "账户",
     session: "会话",
+    currentSession: "当前会话",
+    expandCurrentSession: "展开当前会话",
+    collapseCurrentSession: "折叠当前会话",
+    expandAllSections: "展开全部区块",
+    collapseAllSections: "折叠全部区块",
     weekly: "每周",
+    openDebugLog: "打开调试日志",
+    debugLog: "调试日志",
+    hideThreadsSidebar: "隐藏对话侧边栏",
+    showThreadsSidebar: "显示对话侧边栏",
+    hideGitSidebar: "隐藏 Git 侧边栏",
+    showGitSidebar: "显示 Git 侧边栏",
   },
 
   // 首页
@@ -522,6 +533,13 @@ const zh = {
     message: "条消息",
     messages: "条消息",
     emptyThread: "开始一个对话，向智能体发送提示词。",
+    generatingResponse: "正在生成响应...",
+    doneIn: "完成，用时 {{duration}}",
+    copyMessage: "复制消息",
+    closeImagePreview: "关闭图片预览",
+    toggleReasoning: "切换推理详情",
+    copyCodeBlock: "复制代码块",
+    copy: "复制",
   },
 
   // 编辑器
@@ -549,6 +567,8 @@ const zh = {
     context: "上下文",
     contextUsageAriaLabel: "上下文使用量：已使用 {{percent}}，{{used}} / {{total}}",
     noModels: "无模型",
+    dragToResize: "拖动调整大小",
+    addImage: "添加图片",
     // 审查
     reviewAgainstBaseBranch: "对比基础分支审查",
     prStyle: "（PR 风格）",
@@ -657,6 +677,7 @@ const zh = {
     generateCommitMessageStaged: "从已暂存的更改生成提交信息",
     generateCommitMessageUnstaged: "从未暂存的更改生成提交信息",
     generateCommitMessage: "生成提交信息",
+    commitMessageRequiresCodex: "AI 生成提交信息需要 Codex CLI，请先安装: npm install -g @openai/codex",
     // Git 日志和状态
     noMessage: "无消息",
     unknown: "未知",
@@ -705,6 +726,9 @@ const zh = {
     revertAllTitle: "撤销所有更改",
     revertAllConfirm: "撤销此仓库中的所有更改？",
     revertAllMessage: "这将放弃所有已暂存和未暂存的更改，包括未跟踪的文件。",
+    diffView: "差异视图",
+    dualPanelDiff: "双栏差异",
+    singleColumnDiff: "单栏差异",
   },
 
   // 终端
@@ -742,6 +766,7 @@ const zh = {
     cliNotFoundHint: "安装 Claude Code: npm install -g @anthropic-ai/claude-code\n安装 Codex: npm install -g @openai/codex",
     codexCliNotFound: "未找到 Codex CLI。请安装 Codex 并确保 `codex` 在您的 PATH 中。",
     couldntOpenWorkspace: "无法打开工作区",
+    dismissError: "关闭错误",
   },
 
   // 面板
@@ -889,6 +914,49 @@ const zh = {
     claudeMdNotFound: "未找到",
     claudeMdTruncated: "已截断",
     claudeMdTruncatedWarning: "显示大文件的前半部分。",
+    branch: "分支",
+    workspaceType: "工作区类型",
+    workspaceTypeMain: "主工作区",
+    workspaceTypeWorktree: "工作树",
+    unknownBranch: "unknown",
+    copyPath: "复制路径",
+    pathCopied: "已复制路径",
+    openProjectFolder: "打开项目目录",
+    startConversation: "新建会话",
+    startingConversation: "正在创建...",
+    continueLatestConversation: "继续最近会话",
+    guidedStart: "引导开始",
+    guidedStartHint: "点击卡片将创建会话并自动填入起始提示词。",
+    guideProjectSpecTitle: "读取项目规范",
+    guideProjectSpecDescription: "优先读取 AGENTS.md、CLAUDE.md、README 与项目规则。",
+    guideProjectSpecPrompt:
+      "请先读取并总结当前项目的规范与约束（优先 AGENTS.md、CLAUDE.md、README、docs），提炼必须遵守的规则、关键边界和常见陷阱。",
+    guideCodebaseScanTitle: "快速扫描代码库",
+    guideCodebaseScanDescription: "梳理模块边界、核心入口、数据流和关键依赖。",
+    guideCodebaseScanPrompt:
+      "请快速扫描当前代码库，给我一份结构化项目画像：技术栈、核心模块、主流程入口、关键依赖、风险点与改动建议切入点。",
+    guideImplementationPlanTitle: "生成实施计划",
+    guideImplementationPlanDescription: "把需求拆成可执行步骤，包含验证与回滚。",
+    guideImplementationPlanPrompt:
+      "请基于当前项目上下文生成一份可执行实施计划：目标、范围、步骤、验证方式、风险与回滚方案，优先最小可落地改动。",
+    guideRequirementsTitle: "先梳理需求",
+    guideRequirementsDescription: "先明确目标、范围和验收标准，再开始写代码。",
+    guideRequirementsPrompt:
+      "请帮我拆解当前任务：先总结目标和约束，再给出简洁的实现计划、风险点和验证步骤。",
+    guideReviewTitle: "做一次代码评审",
+    guideReviewDescription: "聚焦正确性、回归风险和缺失测试。",
+    guideReviewPrompt:
+      "请对这次改动做一次聚焦 code review，优先指出 bug、行为回归风险和缺失测试，并按严重级别列出问题与文件位置。",
+    guideDebugTitle: "排查一个问题",
+    guideDebugDescription: "从现象入手，逐步定位根因并给出修复路径。",
+    guideDebugPrompt:
+      "请帮我排查一个问题：先明确症状、影响范围和复现步骤，再给出分步骤的 root cause 调查方案。",
+    recentConversations: "最近会话",
+    recentConversationsHint: "直接回到上次上下文继续处理。",
+    noRecentConversations: "还没有最近会话。",
+    threadProcessing: "处理中",
+    threadReviewing: "评审中",
+    threadIdle: "空闲",
     instance: "{{count}} 个实例",
     instance_other: "{{count}} 个实例",
     failed: "失败",
@@ -989,6 +1057,12 @@ const zh = {
     openFile: "打开文件",
     copyPath: "复制路径",
     revealInFinder: "在访达中显示",
+    deleteItem: "移到废纸篓",
+    deleteFileConfirm: "确定要将 \"{{name}}\" 移到废纸篓吗？",
+    deleteFolderConfirm: "确定要将文件夹 \"{{name}}\" 及其所有内容移到废纸篓吗？",
+    duplicateItem: "创建副本",
+    newFile: "新建文件",
+    newFileNamePlaceholder: "输入文件名",
     filterPlaceholder: "筛选文件和文件夹",
     truncated: "已截断",
     loadingFile: "正在加载文件...",
@@ -1026,6 +1100,7 @@ const zh = {
     cancel: "取消",
     fileTooLarge: "文件过大，无法编辑",
     readOnly: "只读",
+    unsupportedFormat: "暂不支持此文件格式的预览",
   },
 
   // 提示词
@@ -1091,6 +1166,18 @@ const zh = {
     reviewRequest: "审核请求",
     approvalNeeded: "需要批准",
     inputRequested: "请求输入",
+    none: "无",
+    noExtraDetails: "无额外详情。",
+    decline: "拒绝",
+    allowCommandsStartWith: "允许以 {{prefix}} 开头的命令",
+    alwaysAllow: "始终允许",
+    approveEnter: "批准 (Enter)",
+    userInputRequested: "请求用户输入",
+    requestOf: "请求 {{current}} / {{total}}",
+    typeAnswerOptional: "输入你的回答（可选）",
+    addNotesOptional: "添加备注（可选）",
+    noQuestionsProvided: "未提供问题。",
+    submit: "提交",
   },
 
   // 看板
@@ -1115,6 +1202,7 @@ const zh = {
     board: {
       back: "返回",
       addTask: "添加",
+      searchPlaceholder: "搜索...",
     },
     task: {
       createTitle: "创建任务",
@@ -1130,6 +1218,7 @@ const zh = {
       delete: "删除",
       linked: "已关联",
       processing: "处理中...",
+      generateTitle: "生成标题",
     },
     conversation: {
       close: "关闭",
@@ -1153,6 +1242,52 @@ const zh = {
       searchWorkspaces: "搜索工作区...",
       noWorkspacesFound: "未找到工作区",
     },
+    composer: {
+      relatedPanels: "关联项目看板",
+      empty: "暂无关联看板",
+      count: "{{count}} 个看板",
+      clear: "取消选择",
+      more: "更多",
+      collapse: "收起",
+      link: "link",
+    },
+  },
+
+  // 状态面板
+  statusPanel: {
+    tabTodos: "任务",
+    tabSubagents: "子代理",
+    tabEdits: "编辑",
+    files: "文件",
+    emptyTodos: "暂无任务",
+    emptySubagents: "暂无子代理",
+    emptyFileChanges: "暂无文件变更",
+  },
+
+  // 工具
+  tools: {
+    readFile: "读取文件",
+    readDirectory: "读取目录",
+    editFile: "编辑文件",
+    writeFile: "写入文件",
+    editNotebook: "编辑笔记本",
+    runCommand: "运行命令",
+    executeCommand: "执行命令",
+    search: "搜索",
+    fileMatch: "文件匹配",
+    findFile: "查找文件",
+    webFetch: "网页获取",
+    webSearch: "网络搜索",
+    subtask: "子任务",
+    todoList: "待办列表",
+    diffCompare: "Diff对比",
+    result: "结果",
+    webRequest: "网络请求",
+    batchRun: "批量运行",
+    searchMatch: "搜索/匹配",
+    path: "路径",
+    lineRange: "第 {{start}}-{{end}} 行",
+    failedCount: "{{count}} 个失败",
   },
 
   // 使用量标签

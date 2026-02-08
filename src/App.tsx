@@ -63,6 +63,7 @@ import { useOpenPaths } from "./features/workspaces/hooks/useOpenPaths";
 import { useRenameWorktreePrompt } from "./features/workspaces/hooks/useRenameWorktreePrompt";
 import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { useWindowLabel } from "./features/layout/hooks/useWindowLabel";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   SidebarCollapseButton,
@@ -105,9 +106,6 @@ import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaun
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
 import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
-import { useWorkspaceHome } from "./features/workspaces/hooks/useWorkspaceHome";
-import { useWorkspaceAgentMd } from "./features/workspaces/hooks/useWorkspaceAgentMd";
-import { useWorkspaceClaudeMd } from "./features/workspaces/hooks/useWorkspaceClaudeMd";
 import { pickWorkspacePath } from "./services/tauri";
 import type {
   AccessMode,
@@ -576,7 +574,7 @@ function MainApp() {
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
   const { commands } = useCustomCommands({ onDebug: addDebugEntry });
-  const { files, directories, gitignoredFiles, isLoading: isFilesLoading } = useWorkspaceFiles({
+  const { files, directories, gitignoredFiles, isLoading: isFilesLoading, refreshFiles } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
   });
@@ -1169,90 +1167,34 @@ function MainApp() {
     textareaRef: composerInputRef,
   });
 
-  const {
-    runs: workspaceRuns,
-    draft: workspacePrompt,
-    runMode: workspaceRunMode,
-    modelSelections: workspaceModelSelections,
-    error: workspaceRunError,
-    isSubmitting: workspaceRunSubmitting,
-    setDraft: setWorkspacePrompt,
-    setRunMode: setWorkspaceRunMode,
-    toggleModelSelection: toggleWorkspaceModelSelection,
-    setModelCount: setWorkspaceModelCount,
-    startRun: startWorkspaceRun,
-  } = useWorkspaceHome({
-    activeWorkspace,
-    models: effectiveModels,
-    selectedModelId: effectiveSelectedModelId,
-    effort: resolvedEffort,
-    collaborationMode: collaborationModePayload,
-    activeEngine,
-    addWorktreeAgent,
-    connectWorkspace,
-    startThreadForWorkspace,
-    sendUserMessageToThread,
-    onWorktreeCreated: handleWorktreeCreated,
-  });
   const RECENT_THREAD_LIMIT = 8;
-  const { recentThreadInstances, recentThreadsUpdatedAt } = useMemo(() => {
+  const { recentThreads } = useMemo(() => {
     if (!activeWorkspaceId) {
-      return { recentThreadInstances: [], recentThreadsUpdatedAt: null };
+      return { recentThreads: [] };
     }
     const threads = threadsByWorkspace[activeWorkspaceId] ?? [];
     if (threads.length === 0) {
-      return { recentThreadInstances: [], recentThreadsUpdatedAt: null };
+      return { recentThreads: [] };
     }
     const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
     const slice = sorted.slice(0, RECENT_THREAD_LIMIT);
-    const updatedAt = slice.reduce(
-      (max, thread) => (thread.updatedAt > max ? thread.updatedAt : max),
-      0,
-    );
-    const instances = slice.map((thread, index) => ({
-      id: `recent-${thread.id}`,
-      workspaceId: activeWorkspaceId,
-      threadId: thread.id,
-      modelId: null,
-      modelLabel: thread.name?.trim() || t("threads.untitledThread"),
-      sequence: index + 1,
-    }));
+    const summaries = slice.map((thread) => {
+      const status = threadStatusById[thread.id];
+      const displayName = thread.name?.trim() || t("threads.untitledThread");
+      return {
+        id: thread.id,
+        workspaceId: activeWorkspaceId,
+        threadId: thread.id,
+        title: displayName,
+        updatedAt: thread.updatedAt,
+        isProcessing: status?.isProcessing ?? false,
+        isReviewing: status?.isReviewing ?? false,
+      };
+    });
     return {
-      recentThreadInstances: instances,
-      recentThreadsUpdatedAt: updatedAt > 0 ? updatedAt : null,
+      recentThreads: summaries,
     };
-  }, [activeWorkspaceId, threadsByWorkspace]);
-  const {
-    content: agentMdContent,
-    exists: agentMdExists,
-    truncated: agentMdTruncated,
-    isLoading: agentMdLoading,
-    isSaving: agentMdSaving,
-    error: agentMdError,
-    isDirty: agentMdDirty,
-    setContent: setAgentMdContent,
-    refresh: refreshAgentMd,
-    save: saveAgentMd,
-  } = useWorkspaceAgentMd({
-    activeWorkspace,
-    onDebug: addDebugEntry,
-  });
-
-  const {
-    content: claudeMdContent,
-    exists: claudeMdExists,
-    truncated: claudeMdTruncated,
-    isLoading: claudeMdLoading,
-    isSaving: claudeMdSaving,
-    error: claudeMdError,
-    isDirty: claudeMdDirty,
-    setContent: setClaudeMdContent,
-    refresh: refreshClaudeMd,
-    save: saveClaudeMd,
-  } = useWorkspaceClaudeMd({
-    activeWorkspace,
-    onDebug: addDebugEntry,
-  });
+  }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
 
   const {
     commitMessage,
@@ -1441,6 +1383,18 @@ function MainApp() {
   }, [activeTab, isTablet]);
 
   useWindowDrag("titlebar");
+
+  useEffect(() => {
+    try {
+      const title = activeWorkspace
+        ? `CodeMoss - ${activeWorkspace.name}`
+        : "CodeMoss";
+      void getCurrentWindow().setTitle(title);
+    } catch {
+      // Non-Tauri environment, ignore.
+    }
+  }, [activeWorkspace]);
+
   useWorkspaceRestore({
     workspaces,
     hasLoaded,
@@ -1533,6 +1487,7 @@ function MainApp() {
   const {
     handleSelectPullRequest,
     resetPullRequestSelection,
+    isPullRequestComposer,
     composerSendLabel,
     handleComposerSend,
     handleComposerQueue,
@@ -1559,6 +1514,175 @@ function MainApp() {
     queueMessage,
   });
 
+  const [selectedComposerKanbanPanelId, setSelectedComposerKanbanPanelId] =
+    useState<string | null>(null);
+  const composerKanbanWorkspaceIds = useMemo(() => {
+    if (!activeWorkspace) {
+      return [] as string[];
+    }
+    const ids = new Set<string>();
+    ids.add(activeWorkspace.id);
+    if (activeWorkspace.parentId) {
+      ids.add(activeWorkspace.parentId);
+    }
+    // If current workspace is a parent/main workspace, include its worktrees too.
+    for (const workspace of workspaces) {
+      if (workspace.parentId === activeWorkspace.id) {
+        ids.add(workspace.id);
+      }
+    }
+    return Array.from(ids);
+  }, [activeWorkspace, workspaces]);
+  const composerLinkedKanbanPanels = useMemo(() => {
+    if (composerKanbanWorkspaceIds.length === 0) {
+      return [];
+    }
+    return kanbanPanels
+      .filter((panel) => composerKanbanWorkspaceIds.includes(panel.workspaceId))
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((panel) => ({
+        id: panel.id,
+        name: panel.name,
+        workspaceId: panel.workspaceId,
+      }));
+  }, [composerKanbanWorkspaceIds, kanbanPanels]);
+
+  useEffect(() => {
+    if (!selectedComposerKanbanPanelId) {
+      return;
+    }
+    const stillExists = composerLinkedKanbanPanels.some(
+      (panel) => panel.id === selectedComposerKanbanPanelId,
+    );
+    if (!stillExists) {
+      setSelectedComposerKanbanPanelId(null);
+    }
+  }, [composerLinkedKanbanPanels, selectedComposerKanbanPanelId]);
+
+  const handleOpenComposerKanbanPanel = useCallback(
+    (panelId: string) => {
+      const panel = composerLinkedKanbanPanels.find((entry) => entry.id === panelId);
+      if (!panel) {
+        return;
+      }
+      setKanbanViewState({
+        view: "board",
+        workspaceId: panel.workspaceId,
+        panelId,
+      });
+      setAppMode("kanban");
+    },
+    [composerLinkedKanbanPanels, setKanbanViewState],
+  );
+
+  const resolveComposerKanbanPanel = useCallback(
+    (text: string) => {
+      const tagMatches = Array.from(text.matchAll(/&@([^\s]+)/g))
+        .map((entry) => entry[1]?.trim())
+        .filter((value): value is string => Boolean(value));
+      const panelByName = new Map(
+        composerLinkedKanbanPanels.map((panel) => [panel.name, panel.id]),
+      );
+      const firstTaggedPanelId =
+        tagMatches.map((name) => panelByName.get(name)).find(Boolean) ?? null;
+      const panelId =
+        firstTaggedPanelId ??
+        (selectedComposerKanbanPanelId &&
+        composerLinkedKanbanPanels.some(
+          (panel) => panel.id === selectedComposerKanbanPanelId,
+        )
+          ? selectedComposerKanbanPanelId
+          : null);
+      const cleanText = text.replace(/&@[^\s]+/g, " ").replace(/\s+/g, " ").trim();
+      return { panelId, cleanText };
+    },
+    [composerLinkedKanbanPanels, selectedComposerKanbanPanelId],
+  );
+
+  const handleComposerSendWithKanban = useCallback(
+    async (text: string, images: string[]) => {
+      const trimmedOriginalText = text.trim();
+      const { panelId, cleanText } = resolveComposerKanbanPanel(trimmedOriginalText);
+      const textForSending = cleanText;
+
+      if (!panelId || !activeWorkspaceId || isPullRequestComposer) {
+        const fallbackText =
+          textForSending.length > 0 ? textForSending : trimmedOriginalText;
+        await handleComposerSend(fallbackText, images);
+        return;
+      }
+
+      const workspace = workspacesById.get(activeWorkspaceId);
+      if (!workspace) {
+        await handleComposerSend(
+          textForSending.length > 0 ? textForSending : trimmedOriginalText,
+          images,
+        );
+        return;
+      }
+
+      // &@ 看板消息必须在新会话里执行，不能污染当前会话窗口
+      if (!workspace.connected) {
+        await connectWorkspace(workspace);
+      }
+      const engine = (activeEngine === "codex" ? "codex" : "claude") as
+        | "codex"
+        | "claude";
+      const threadId = await startThreadForWorkspace(activeWorkspaceId, {
+        engine,
+        activate: false,
+      });
+      if (!threadId) {
+        return;
+      }
+
+      if (textForSending.length > 0 || images.length > 0) {
+        await sendUserMessageToThread(workspace, threadId, textForSending, images);
+      }
+
+      const taskDescription = textForSending.length > 0 ? textForSending : trimmedOriginalText;
+      const taskTitleSource =
+        taskDescription.split("\n").find((line) => line.trim().length > 0) ??
+        "";
+      const taskTitle =
+        taskTitleSource.trim().slice(0, 80) ||
+        composerLinkedKanbanPanels.find((panel) => panel.id === panelId)?.name ||
+        "Kanban Task";
+      const createdTask = kanbanCreateTask({
+        workspaceId: activeWorkspaceId,
+        panelId,
+        title: taskTitle,
+        description: taskDescription,
+        engineType: engine,
+        modelId: effectiveSelectedModelId,
+        branchName: "main",
+        images,
+        autoStart: true,
+      });
+
+      kanbanUpdateTask(createdTask.id, {
+        threadId,
+        status: "inprogress",
+      });
+    },
+    [
+      resolveComposerKanbanPanel,
+      handleComposerSend,
+      activeWorkspaceId,
+      workspacesById,
+      connectWorkspace,
+      startThreadForWorkspace,
+      sendUserMessageToThread,
+      isPullRequestComposer,
+      activeEngine,
+      effectiveSelectedModelId,
+      composerLinkedKanbanPanels,
+      kanbanCreateTask,
+      kanbanUpdateTask,
+    ],
+  );
+
   const handleSelectWorkspaceInstance = useCallback(
     (workspaceId: string, threadId: string) => {
       exitDiffView();
@@ -1578,6 +1702,97 @@ function MainApp() {
       setActiveThreadId,
     ],
   );
+
+  const handleStartWorkspaceConversation = useCallback(async () => {
+    if (!activeWorkspace) {
+      return;
+    }
+    try {
+      if (!activeWorkspace.connected) {
+        await connectWorkspace(activeWorkspace);
+      }
+      const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+        activate: true,
+        engine: activeEngine,
+      });
+      if (!threadId) {
+        return;
+      }
+      setActiveThreadId(threadId, activeWorkspace.id);
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+    } catch (error) {
+      alertError(error);
+    }
+  }, [
+    activeEngine,
+    activeWorkspace,
+    alertError,
+    connectWorkspace,
+    isCompact,
+    setActiveTab,
+    setActiveThreadId,
+    startThreadForWorkspace,
+  ]);
+
+  const handleContinueLatestConversation = useCallback(() => {
+    const latest = recentThreads[0];
+    if (!latest) {
+      return;
+    }
+    handleSelectWorkspaceInstance(latest.workspaceId, latest.threadId);
+  }, [handleSelectWorkspaceInstance, recentThreads]);
+
+  const handleStartGuidedConversation = useCallback(
+    async (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (!activeWorkspace || !normalizedPrompt) {
+        return;
+      }
+      try {
+        if (!activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+          activate: true,
+          engine: activeEngine,
+        });
+        if (!threadId) {
+          return;
+        }
+        setActiveThreadId(threadId, activeWorkspace.id);
+        await sendUserMessageToThread(activeWorkspace, threadId, normalizedPrompt);
+        if (isCompact) {
+          setActiveTab("codex");
+        }
+      } catch (error) {
+        alertError(error);
+      }
+    },
+    [
+      activeEngine,
+      activeWorkspace,
+      alertError,
+      connectWorkspace,
+      isCompact,
+      sendUserMessageToThread,
+      setActiveTab,
+      setActiveThreadId,
+      startThreadForWorkspace,
+    ],
+  );
+
+  const handleRevealActiveWorkspace = useCallback(async () => {
+    if (!activeWorkspace?.path) {
+      return;
+    }
+    try {
+      await revealItemInDir(activeWorkspace.path);
+    } catch (error) {
+      alertError(error);
+    }
+  }, [activeWorkspace?.path, alertError]);
 
   // --- Kanban conversation handlers ---
   const handleOpenTaskConversation = useCallback(
@@ -2190,6 +2405,7 @@ function MainApp() {
     filePanelMode,
     onFilePanelModeChange: setFilePanelMode,
     fileTreeLoading: isFilesLoading,
+    onRefreshFiles: refreshFiles,
     centerMode,
     editorFilePath,
     onOpenFile: handleOpenFile,
@@ -2300,7 +2516,7 @@ function MainApp() {
     onRevealWorkspacePrompts: handleRevealWorkspacePrompts,
     onRevealGeneralPrompts: handleRevealGeneralPrompts,
     canRevealGeneralPrompts: Boolean(activeWorkspace),
-    onSend: handleComposerSend,
+    onSend: handleComposerSendWithKanban,
     onQueue: handleComposerQueue,
     onStop: interruptTurn,
     canStop: canInterrupt,
@@ -2387,6 +2603,10 @@ function MainApp() {
     dictationHint,
     onDismissDictationHint: clearDictationHint,
     composerSendLabel,
+    composerLinkedKanbanPanels,
+    selectedComposerKanbanPanelId,
+    onSelectComposerKanbanPanel: setSelectedComposerKanbanPanelId,
+    onOpenComposerKanbanPanel: handleOpenComposerKanbanPanel,
     showComposer,
     plan: activePlan,
     debugEntries,
@@ -2421,80 +2641,13 @@ function MainApp() {
   const workspaceHomeNode = activeWorkspace ? (
     <WorkspaceHome
       workspace={activeWorkspace}
-      runs={workspaceRuns}
-      recentThreadInstances={recentThreadInstances}
-      recentThreadsUpdatedAt={recentThreadsUpdatedAt}
-      prompt={workspacePrompt}
-      onPromptChange={setWorkspacePrompt}
-      onStartRun={startWorkspaceRun}
-      runMode={workspaceRunMode}
-      onRunModeChange={setWorkspaceRunMode}
-      engines={installedEngines}
-      selectedEngine={activeEngine}
-      onSelectEngine={setActiveEngine}
-      models={effectiveModels}
-      selectedModelId={effectiveSelectedModelId}
-      onSelectModel={handleSelectModel}
-      modelSelections={workspaceModelSelections}
-      onToggleModel={toggleWorkspaceModelSelection}
-      onModelCountChange={setWorkspaceModelCount}
-      collaborationModes={collaborationModes}
-      selectedCollaborationModeId={selectedCollaborationModeId}
-      onSelectCollaborationMode={setSelectedCollaborationModeId}
-      reasoningOptions={reasoningOptions}
-      selectedEffort={selectedEffort}
-      onSelectEffort={setSelectedEffort}
-      reasoningSupported={effectiveReasoningSupported}
-      error={workspaceRunError}
-      isSubmitting={workspaceRunSubmitting}
-      activeWorkspaceId={activeWorkspaceId}
-      activeThreadId={activeThreadId}
-      threadStatusById={threadStatusById}
-      onSelectInstance={handleSelectWorkspaceInstance}
-      skills={skills}
-      prompts={prompts}
-      commands={commands}
-      files={files}
-      directories={directories}
-      dictationEnabled={appSettings.dictationEnabled && dictationReady}
-      dictationState={dictationState}
-      dictationLevel={dictationLevel}
-      onToggleDictation={handleToggleDictation}
-      onOpenDictationSettings={() => openSettings("dictation")}
-      dictationError={dictationError}
-      onDismissDictationError={clearDictationError}
-      dictationHint={dictationHint}
-      onDismissDictationHint={clearDictationHint}
-      dictationTranscript={dictationTranscript}
-      onDictationTranscriptHandled={clearDictationTranscript}
-      agentMdContent={agentMdContent}
-      agentMdExists={agentMdExists}
-      agentMdTruncated={agentMdTruncated}
-      agentMdLoading={agentMdLoading}
-      agentMdSaving={agentMdSaving}
-      agentMdError={agentMdError}
-      agentMdDirty={agentMdDirty}
-      onAgentMdChange={setAgentMdContent}
-      onAgentMdRefresh={() => {
-        void refreshAgentMd();
-      }}
-      onAgentMdSave={() => {
-        void saveAgentMd();
-      }}
-      claudeMdContent={claudeMdContent}
-      claudeMdExists={claudeMdExists}
-      claudeMdTruncated={claudeMdTruncated}
-      claudeMdLoading={claudeMdLoading}
-      claudeMdSaving={claudeMdSaving}
-      claudeMdError={claudeMdError}
-      claudeMdDirty={claudeMdDirty}
-      onClaudeMdChange={setClaudeMdContent}
-      onClaudeMdRefresh={() => {
-        void refreshClaudeMd();
-      }}
-      onClaudeMdSave={() => {
-        void saveClaudeMd();
-      }}
+      currentBranch={gitStatus.branchName || null}
+      recentThreads={recentThreads}
+      onSelectConversation={handleSelectWorkspaceInstance}
+      onStartConversation={handleStartWorkspaceConversation}
+      onContinueLatestConversation={handleContinueLatestConversation}
+      onStartGuidedConversation={handleStartGuidedConversation}
+      onRevealWorkspace={handleRevealActiveWorkspace}
     />
   ) : null;
 

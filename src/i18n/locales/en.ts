@@ -78,7 +78,18 @@ const en = {
     signIn: "Sign in",
     account: "Account",
     session: "Session",
+    currentSession: "Current session",
+    expandCurrentSession: "Expand current session",
+    collapseCurrentSession: "Collapse current session",
+    expandAllSections: "Expand all sections",
+    collapseAllSections: "Collapse all sections",
     weekly: "Weekly",
+    openDebugLog: "Open debug log",
+    debugLog: "Debug log",
+    hideThreadsSidebar: "Hide threads sidebar",
+    showThreadsSidebar: "Show threads sidebar",
+    hideGitSidebar: "Hide git sidebar",
+    showGitSidebar: "Show git sidebar",
   },
 
   // Home
@@ -522,6 +533,13 @@ const en = {
     message: "message",
     messages: "messages",
     emptyThread: "Start a thread and send a prompt to the agent.",
+    generatingResponse: "Generating response...",
+    doneIn: "Done in {{duration}}",
+    copyMessage: "Copy message",
+    closeImagePreview: "Close image preview",
+    toggleReasoning: "Toggle reasoning details",
+    copyCodeBlock: "Copy code block",
+    copy: "Copy",
   },
 
   // Composer
@@ -549,6 +567,8 @@ const en = {
     context: "Context",
     contextUsageAriaLabel: "Context usage: {{percent}} used, {{used}} / {{total}}",
     noModels: "No models",
+    dragToResize: "Drag to resize",
+    addImage: "Add image",
     // Review
     reviewAgainstBaseBranch: "Review against a base branch",
     prStyle: "(PR Style)",
@@ -657,6 +677,7 @@ const en = {
     generateCommitMessageStaged: "Generate commit message from staged changes",
     generateCommitMessageUnstaged: "Generate commit message from unstaged changes",
     generateCommitMessage: "Generate commit message",
+    commitMessageRequiresCodex: "AI commit message generation requires the Codex CLI. Install it with: npm install -g @openai/codex",
     // Git log and status
     noMessage: "No message",
     unknown: "unknown",
@@ -705,6 +726,9 @@ const en = {
     revertAllTitle: "Revert all changes",
     revertAllConfirm: "Revert all changes in this repo?",
     revertAllMessage: "This will discard all staged and unstaged changes, including untracked files.",
+    diffView: "Diff view",
+    dualPanelDiff: "Dual-panel diff",
+    singleColumnDiff: "Single-column diff",
   },
 
   // Terminal
@@ -742,6 +766,7 @@ const en = {
     cliNotFoundHint: "Install Claude Code: npm install -g @anthropic-ai/claude-code\nInstall Codex: npm install -g @openai/codex",
     codexCliNotFound: "Codex CLI not found. Install Codex and ensure `codex` is on your PATH.",
     couldntOpenWorkspace: "Couldn't open workspace",
+    dismissError: "Dismiss error",
   },
 
   // Panels
@@ -889,6 +914,49 @@ const en = {
     claudeMdNotFound: "Not found",
     claudeMdTruncated: "Truncated",
     claudeMdTruncatedWarning: "Showing the first part of a large file.",
+    branch: "Branch",
+    workspaceType: "Workspace type",
+    workspaceTypeMain: "Main workspace",
+    workspaceTypeWorktree: "Worktree",
+    unknownBranch: "unknown",
+    copyPath: "Copy path",
+    pathCopied: "Path copied",
+    openProjectFolder: "Open project folder",
+    startConversation: "Start conversation",
+    startingConversation: "Starting...",
+    continueLatestConversation: "Continue latest conversation",
+    guidedStart: "Guided starts",
+    guidedStartHint: "Create a new conversation with a starter prompt.",
+    guideProjectSpecTitle: "Read project specs",
+    guideProjectSpecDescription: "Load AGENTS.md, CLAUDE.md, README, and project rules first.",
+    guideProjectSpecPrompt:
+      "Please read and summarize this project's key specs and constraints first (prioritize AGENTS.md, CLAUDE.md, README, and docs). Extract must-follow rules, boundaries, and common pitfalls.",
+    guideCodebaseScanTitle: "Scan codebase quickly",
+    guideCodebaseScanDescription: "Map module boundaries, entry points, data flow, and dependencies.",
+    guideCodebaseScanPrompt:
+      "Please perform a fast codebase scan and give me a structured project map: stack, core modules, main entry points, key dependencies, risks, and recommended low-risk change entry points.",
+    guideImplementationPlanTitle: "Create implementation plan",
+    guideImplementationPlanDescription: "Break work into actionable steps with validation and rollback.",
+    guideImplementationPlanPrompt:
+      "Based on the current project context, create an executable implementation plan: objective, scope, step-by-step tasks, validation strategy, risks, and rollback plan. Prefer minimum viable changes.",
+    guideRequirementsTitle: "Break down requirements",
+    guideRequirementsDescription: "Clarify goals, scope, and acceptance criteria before coding.",
+    guideRequirementsPrompt:
+      "Help me break down this task. First summarize goals and constraints, then propose a concise implementation plan with risks and validation steps.",
+    guideReviewTitle: "Run a code review",
+    guideReviewDescription: "Focus on correctness, regression risks, and missing tests.",
+    guideReviewPrompt:
+      "I want a focused code review. Prioritize bugs, behavior regressions, and missing tests. List findings by severity with clear file references.",
+    guideDebugTitle: "Investigate a bug",
+    guideDebugDescription: "Trace symptoms, isolate root cause, and propose a fix path.",
+    guideDebugPrompt:
+      "Help me debug an issue. Ask for symptoms, likely scope, and reproduction steps, then propose a step-by-step root-cause investigation plan.",
+    recentConversations: "Recent conversations",
+    recentConversationsHint: "Jump back to a thread and continue.",
+    noRecentConversations: "No recent conversations yet.",
+    threadProcessing: "Processing",
+    threadReviewing: "Reviewing",
+    threadIdle: "Idle",
     instance: "{{count}} instance",
     instance_other: "{{count}} instances",
     failed: "Failed",
@@ -989,6 +1057,12 @@ const en = {
     openFile: "Open File",
     copyPath: "Copy Path",
     revealInFinder: "Reveal in Finder",
+    deleteItem: "Move to Trash",
+    deleteFileConfirm: "Are you sure you want to move \"{{name}}\" to the trash?",
+    deleteFolderConfirm: "Are you sure you want to move the folder \"{{name}}\" and all its contents to the trash?",
+    duplicateItem: "Duplicate",
+    newFile: "New File",
+    newFileNamePlaceholder: "Enter file name",
     filterPlaceholder: "Filter files and folders",
     truncated: "Truncated",
     loadingFile: "Loading file...",
@@ -1026,6 +1100,7 @@ const en = {
     cancel: "Cancel",
     fileTooLarge: "File too large to edit",
     readOnly: "Read-only",
+    unsupportedFormat: "This file format is not supported for preview",
   },
 
   // Prompts
@@ -1091,6 +1166,18 @@ const en = {
     reviewRequest: "Review Request",
     approvalNeeded: "Approval needed",
     inputRequested: "Input requested",
+    none: "None",
+    noExtraDetails: "No extra details.",
+    decline: "Decline",
+    allowCommandsStartWith: "Allow commands that start with {{prefix}}",
+    alwaysAllow: "Always allow",
+    approveEnter: "Approve (Enter)",
+    userInputRequested: "User input requested",
+    requestOf: "Request {{current}} of {{total}}",
+    typeAnswerOptional: "Type your answer (optional)",
+    addNotesOptional: "Add notes (optional)",
+    noQuestionsProvided: "No questions provided.",
+    submit: "Submit",
   },
 
   // Kanban
@@ -1115,6 +1202,7 @@ const en = {
     board: {
       back: "Back",
       addTask: "Add",
+      searchPlaceholder: "Search...",
     },
     task: {
       createTitle: "Create Task",
@@ -1130,6 +1218,7 @@ const en = {
       delete: "Delete",
       linked: "Linked",
       processing: "Processing...",
+      generateTitle: "Generate title",
     },
     conversation: {
       close: "Close",
@@ -1153,6 +1242,52 @@ const en = {
       searchWorkspaces: "Search workspaces...",
       noWorkspacesFound: "No workspaces found",
     },
+    composer: {
+      relatedPanels: "Linked Project Panels",
+      empty: "No linked panels",
+      count: "{{count}} panels",
+      clear: "Clear selection",
+      more: "More",
+      collapse: "Collapse",
+      link: "link",
+    },
+  },
+
+  // Status Panel
+  statusPanel: {
+    tabTodos: "Tasks",
+    tabSubagents: "Subagents",
+    tabEdits: "Edits",
+    files: "files",
+    emptyTodos: "No tasks",
+    emptySubagents: "No subagents",
+    emptyFileChanges: "No file changes",
+  },
+
+  // Tools
+  tools: {
+    readFile: "Read file",
+    readDirectory: "Read directory",
+    editFile: "Edit file",
+    writeFile: "Write file",
+    editNotebook: "Edit notebook",
+    runCommand: "Run command",
+    executeCommand: "Execute command",
+    search: "Search",
+    fileMatch: "File match",
+    findFile: "Find file",
+    webFetch: "Web fetch",
+    webSearch: "Web search",
+    subtask: "Subtask",
+    todoList: "Todo list",
+    diffCompare: "Diff",
+    result: "Result",
+    webRequest: "Web request",
+    batchRun: "Batch run",
+    searchMatch: "Search/Match",
+    path: "Path",
+    lineRange: "Line {{start}}-{{end}}",
+    failedCount: "{{count}} failed",
   },
 
   // Usage labels

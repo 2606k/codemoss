@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode, type MouseEvent } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState, type ReactNode, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import { useTranslation } from "react-i18next";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -194,6 +195,7 @@ function LinkBlock({ urls }: LinkBlockProps) {
 }
 
 function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number | null>(null);
   const languageTag = extractLanguageTag(className);
@@ -233,10 +235,10 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
           type="button"
           className={`ghost markdown-codeblock-copy${copied ? " is-copied" : ""}`}
           onClick={handleCopy}
-          aria-label="Copy code block"
-          title={copied ? "Copied" : "Copy"}
+          aria-label={t("messages.copyCodeBlock")}
+          title={copied ? t("messages.copied") : t("messages.copy")}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("messages.copied") : t("messages.copy")}
         </button>
       </div>
       <pre>
@@ -306,7 +308,7 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
   );
 }
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   value,
   className,
   codeBlock,
@@ -315,7 +317,38 @@ export function Markdown({
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: MarkdownProps) {
-  const normalizedValue = codeBlock ? value : normalizeListIndentation(value);
+  // Throttle rapid value changes during streaming to reduce expensive
+  // ReactMarkdown re-parses that block the main thread and cause input lag.
+  const [throttledValue, setThrottledValue] = useState(value);
+  const lastUpdateRef = useRef(Date.now());
+  const throttleTimerRef = useRef<number>(0);
+
+  useEffect(() => {
+    const now = Date.now();
+    const elapsed = now - lastUpdateRef.current;
+    // If enough time has passed (>80ms), update immediately
+    if (elapsed >= 80) {
+      setThrottledValue(value);
+      lastUpdateRef.current = now;
+      return;
+    }
+    // Otherwise schedule a deferred update
+    if (throttleTimerRef.current) {
+      window.clearTimeout(throttleTimerRef.current);
+    }
+    throttleTimerRef.current = window.setTimeout(() => {
+      setThrottledValue(value);
+      lastUpdateRef.current = Date.now();
+    }, 80 - elapsed);
+    return () => {
+      if (throttleTimerRef.current) {
+        window.clearTimeout(throttleTimerRef.current);
+      }
+    };
+  }, [value]);
+
+  const renderValue = throttledValue;
+  const normalizedValue = codeBlock ? renderValue : normalizeListIndentation(renderValue);
   const content = codeBlock
     ? `\`\`\`\n${normalizedValue}\n\`\`\``
     : normalizedValue;
@@ -427,4 +460,4 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});
