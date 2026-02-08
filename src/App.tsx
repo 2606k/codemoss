@@ -2111,9 +2111,9 @@ function MainApp() {
     );
   };
 
-  const showComposer = (!isCompact
+  const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
     ? centerMode === "chat" || centerMode === "diff"
-    : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome;
+    : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome);
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
 
