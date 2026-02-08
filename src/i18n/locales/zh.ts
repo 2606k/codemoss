@@ -1218,6 +1218,7 @@ const zh = {
     },
     board: {
       back: "返回",
+      backToChat: "返回对话",
       addTask: "添加",
       searchPlaceholder: "搜索...",
     },
@@ -1267,6 +1268,9 @@ const zh = {
       more: "更多",
       collapse: "收起",
       link: "link",
+      contextModeLabel: "上下文",
+      contextModeNew: "新会话",
+      contextModeInherit: "继承当前",
     },
   },
 
