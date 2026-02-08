@@ -1218,6 +1218,7 @@ const en = {
     },
     board: {
       back: "Back",
+      backToChat: "Back to Chat",
       addTask: "Add",
       searchPlaceholder: "Search...",
     },
@@ -1267,6 +1268,9 @@ const en = {
       more: "More",
       collapse: "Collapse",
       link: "link",
+      contextModeLabel: "Context",
+      contextModeNew: "New Thread",
+      contextModeInherit: "Inherit Current",
     },
   },
 
