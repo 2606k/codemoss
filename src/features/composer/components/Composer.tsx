@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   ComposerEditorSettings,
   ConversationItem,
@@ -29,6 +30,8 @@ import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
 import { ComposerQueue } from "./ComposerQueue";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Check from "lucide-react/dist/esm/icons/check";
 
 type ComposerProps = {
   items?: ConversationItem[];
@@ -117,6 +120,10 @@ type ComposerProps = {
   onReviewPromptConfirmCommit?: () => Promise<void>;
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
+  linkedKanbanPanels?: { id: string; name: string; workspaceId: string }[];
+  selectedLinkedKanbanPanelId?: string | null;
+  onSelectLinkedKanbanPanel?: (panelId: string | null) => void;
+  onOpenLinkedKanbanPanel?: (panelId: string) => void;
 };
 
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
@@ -211,7 +218,12 @@ export function Composer({
   onReviewPromptConfirmCommit,
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
+  linkedKanbanPanels = [],
+  selectedLinkedKanbanPanelId = null,
+  onSelectLinkedKanbanPanel,
+  onOpenLinkedKanbanPanel,
 }: ComposerProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
@@ -341,6 +353,34 @@ export function Composer({
     setComposerText,
     text,
   ]);
+
+  const handleSelectLinkedPanel = useCallback(
+    (panelId: string) => {
+      const isTogglingOff = selectedLinkedKanbanPanelId === panelId;
+      onSelectLinkedKanbanPanel?.(isTogglingOff ? null : panelId);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) {
+          return;
+        }
+        textarea.focus();
+        const cursor = textarea.selectionStart ?? text.length;
+        textarea.setSelectionRange(cursor, cursor);
+        handleSelectionChange(cursor);
+      });
+    },
+    [
+      handleSelectionChange,
+      onSelectLinkedKanbanPanel,
+      selectedLinkedKanbanPanelId,
+      text,
+      textareaRef,
+    ],
+  );
+
+  const selectedLinkedPanel = linkedKanbanPanels.find(
+    (panel) => panel.id === selectedLinkedKanbanPanelId,
+  );
 
   useEffect(() => {
     if (!prefillDraft) {
@@ -522,6 +562,52 @@ export function Composer({
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
+      <div className="composer-kanban-toolbar composer-kanban-toolbar--outside">
+        <span className="composer-kanban-strip-title">
+          {t("kanban.composer.relatedPanels")}
+        </span>
+        {linkedKanbanPanels.length > 0 ? (
+          <div className="composer-kanban-strip" role="tablist" aria-label={t("kanban.composer.relatedPanels")}>
+            {linkedKanbanPanels.map((panel) => {
+              const isActive = selectedLinkedKanbanPanelId === panel.id;
+              return (
+                <div
+                  key={panel.id}
+                  className={`composer-kanban-strip-item${isActive ? " is-active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="composer-kanban-strip-main"
+                    onClick={() => handleSelectLinkedPanel(panel.id)}
+                  >
+                    {isActive && <Check size={12} />}
+                    <span>{panel.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="composer-kanban-strip-link"
+                    onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
+                  >
+                    <ExternalLink size={12} />
+                    <span>{t("kanban.composer.link")}</span>
+                  </button>
+                </div>
+              );
+            })}
+            {selectedLinkedPanel && (
+              <button
+                type="button"
+                className="composer-kanban-strip-clear"
+                onClick={() => handleSelectLinkedPanel(selectedLinkedPanel.id)}
+              >
+                {t("kanban.composer.clear")}
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="composer-kanban-strip-empty">{t("kanban.composer.empty")}</span>
+        )}
+      </div>
       <ComposerInput
         text={text}
         disabled={disabled}

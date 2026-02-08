@@ -1153,6 +1153,15 @@ const zh = {
       searchWorkspaces: "搜索工作区...",
       noWorkspacesFound: "未找到工作区",
     },
+    composer: {
+      relatedPanels: "关联项目看板",
+      empty: "暂无关联看板",
+      count: "{{count}} 个看板",
+      clear: "取消选择",
+      more: "更多",
+      collapse: "收起",
+      link: "link",
+    },
   },
 
   // 使用量标签

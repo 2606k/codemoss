@@ -1533,6 +1533,7 @@ function MainApp() {
   const {
     handleSelectPullRequest,
     resetPullRequestSelection,
+    isPullRequestComposer,
     composerSendLabel,
     handleComposerSend,
     handleComposerQueue,
@@ -1558,6 +1559,175 @@ function MainApp() {
     handleSend,
     queueMessage,
   });
+
+  const [selectedComposerKanbanPanelId, setSelectedComposerKanbanPanelId] =
+    useState<string | null>(null);
+  const composerKanbanWorkspaceIds = useMemo(() => {
+    if (!activeWorkspace) {
+      return [] as string[];
+    }
+    const ids = new Set<string>();
+    ids.add(activeWorkspace.id);
+    if (activeWorkspace.parentId) {
+      ids.add(activeWorkspace.parentId);
+    }
+    // If current workspace is a parent/main workspace, include its worktrees too.
+    for (const workspace of workspaces) {
+      if (workspace.parentId === activeWorkspace.id) {
+        ids.add(workspace.id);
+      }
+    }
+    return Array.from(ids);
+  }, [activeWorkspace, workspaces]);
+  const composerLinkedKanbanPanels = useMemo(() => {
+    if (composerKanbanWorkspaceIds.length === 0) {
+      return [];
+    }
+    return kanbanPanels
+      .filter((panel) => composerKanbanWorkspaceIds.includes(panel.workspaceId))
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((panel) => ({
+        id: panel.id,
+        name: panel.name,
+        workspaceId: panel.workspaceId,
+      }));
+  }, [composerKanbanWorkspaceIds, kanbanPanels]);
+
+  useEffect(() => {
+    if (!selectedComposerKanbanPanelId) {
+      return;
+    }
+    const stillExists = composerLinkedKanbanPanels.some(
+      (panel) => panel.id === selectedComposerKanbanPanelId,
+    );
+    if (!stillExists) {
+      setSelectedComposerKanbanPanelId(null);
+    }
+  }, [composerLinkedKanbanPanels, selectedComposerKanbanPanelId]);
+
+  const handleOpenComposerKanbanPanel = useCallback(
+    (panelId: string) => {
+      const panel = composerLinkedKanbanPanels.find((entry) => entry.id === panelId);
+      if (!panel) {
+        return;
+      }
+      setKanbanViewState({
+        view: "board",
+        workspaceId: panel.workspaceId,
+        panelId,
+      });
+      setAppMode("kanban");
+    },
+    [composerLinkedKanbanPanels, setKanbanViewState],
+  );
+
+  const resolveComposerKanbanPanel = useCallback(
+    (text: string) => {
+      const tagMatches = Array.from(text.matchAll(/&@([^\s]+)/g))
+        .map((entry) => entry[1]?.trim())
+        .filter((value): value is string => Boolean(value));
+      const panelByName = new Map(
+        composerLinkedKanbanPanels.map((panel) => [panel.name, panel.id]),
+      );
+      const firstTaggedPanelId =
+        tagMatches.map((name) => panelByName.get(name)).find(Boolean) ?? null;
+      const panelId =
+        firstTaggedPanelId ??
+        (selectedComposerKanbanPanelId &&
+        composerLinkedKanbanPanels.some(
+          (panel) => panel.id === selectedComposerKanbanPanelId,
+        )
+          ? selectedComposerKanbanPanelId
+          : null);
+      const cleanText = text.replace(/&@[^\s]+/g, " ").replace(/\s+/g, " ").trim();
+      return { panelId, cleanText };
+    },
+    [composerLinkedKanbanPanels, selectedComposerKanbanPanelId],
+  );
+
+  const handleComposerSendWithKanban = useCallback(
+    async (text: string, images: string[]) => {
+      const trimmedOriginalText = text.trim();
+      const { panelId, cleanText } = resolveComposerKanbanPanel(trimmedOriginalText);
+      const textForSending = cleanText;
+
+      if (!panelId || !activeWorkspaceId || isPullRequestComposer) {
+        const fallbackText =
+          textForSending.length > 0 ? textForSending : trimmedOriginalText;
+        await handleComposerSend(fallbackText, images);
+        return;
+      }
+
+      const workspace = workspacesById.get(activeWorkspaceId);
+      if (!workspace) {
+        await handleComposerSend(
+          textForSending.length > 0 ? textForSending : trimmedOriginalText,
+          images,
+        );
+        return;
+      }
+
+      // &@ 看板消息必须在新会话里执行，不能污染当前会话窗口
+      if (!workspace.connected) {
+        await connectWorkspace(workspace);
+      }
+      const engine = (activeEngine === "codex" ? "codex" : "claude") as
+        | "codex"
+        | "claude";
+      const threadId = await startThreadForWorkspace(activeWorkspaceId, {
+        engine,
+        activate: false,
+      });
+      if (!threadId) {
+        return;
+      }
+
+      if (textForSending.length > 0 || images.length > 0) {
+        await sendUserMessageToThread(workspace, threadId, textForSending, images);
+      }
+
+      const taskDescription = textForSending.length > 0 ? textForSending : trimmedOriginalText;
+      const taskTitleSource =
+        taskDescription.split("\n").find((line) => line.trim().length > 0) ??
+        "";
+      const taskTitle =
+        taskTitleSource.trim().slice(0, 80) ||
+        composerLinkedKanbanPanels.find((panel) => panel.id === panelId)?.name ||
+        "Kanban Task";
+      const createdTask = kanbanCreateTask({
+        workspaceId: activeWorkspaceId,
+        panelId,
+        title: taskTitle,
+        description: taskDescription,
+        engineType: engine,
+        modelId: effectiveSelectedModelId,
+        branchName: "main",
+        images,
+        autoStart: true,
+      });
+
+      kanbanUpdateTask(createdTask.id, {
+        threadId,
+        status: "inprogress",
+      });
+    },
+    [
+      resolveComposerKanbanPanel,
+      handleComposerSend,
+      activeWorkspaceId,
+      workspacesById,
+      connectWorkspace,
+      startThreadForWorkspace,
+      sendUserMessageToThread,
+      isPullRequestComposer,
+      activeEngine,
+      effectiveSelectedModelId,
+      composerLinkedKanbanPanels,
+      kanbanCreateTask,
+      kanbanUpdateTask,
+    ],
+  );
 
   const handleSelectWorkspaceInstance = useCallback(
     (workspaceId: string, threadId: string) => {
@@ -2300,7 +2470,7 @@ function MainApp() {
     onRevealWorkspacePrompts: handleRevealWorkspacePrompts,
     onRevealGeneralPrompts: handleRevealGeneralPrompts,
     canRevealGeneralPrompts: Boolean(activeWorkspace),
-    onSend: handleComposerSend,
+    onSend: handleComposerSendWithKanban,
     onQueue: handleComposerQueue,
     onStop: interruptTurn,
     canStop: canInterrupt,
@@ -2387,6 +2557,10 @@ function MainApp() {
     dictationHint,
     onDismissDictationHint: clearDictationHint,
     composerSendLabel,
+    composerLinkedKanbanPanels,
+    selectedComposerKanbanPanelId,
+    onSelectComposerKanbanPanel: setSelectedComposerKanbanPanelId,
+    onOpenComposerKanbanPanel: handleOpenComposerKanbanPanel,
     showComposer,
     plan: activePlan,
     debugEntries,

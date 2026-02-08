@@ -1153,6 +1153,15 @@ const en = {
       searchWorkspaces: "Search workspaces...",
       noWorkspacesFound: "No workspaces found",
     },
+    composer: {
+      relatedPanels: "Linked Project Panels",
+      empty: "No linked panels",
+      count: "{{count}} panels",
+      clear: "Clear selection",
+      more: "More",
+      collapse: "Collapse",
+      link: "link",
+    },
   },
 
   // Usage labels

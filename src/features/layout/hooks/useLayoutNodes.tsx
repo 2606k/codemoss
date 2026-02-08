@@ -419,6 +419,10 @@ type LayoutNodesOptions = {
   onDismissDictationHint: () => void;
   showComposer: boolean;
   composerSendLabel?: string;
+  composerLinkedKanbanPanels: { id: string; name: string; workspaceId: string }[];
+  selectedComposerKanbanPanelId: string | null;
+  onSelectComposerKanbanPanel: (panelId: string | null) => void;
+  onOpenComposerKanbanPanel: (panelId: string) => void;
   plan: TurnPlan | null;
   debugEntries: DebugEntry[];
   debugOpen: boolean;
@@ -612,6 +616,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onDismissDictationError={options.onDismissDictationError}
       dictationHint={options.dictationHint}
       onDismissDictationHint={options.onDismissDictationHint}
+      linkedKanbanPanels={options.composerLinkedKanbanPanels}
+      selectedLinkedKanbanPanelId={options.selectedComposerKanbanPanelId}
+      onSelectLinkedKanbanPanel={options.onSelectComposerKanbanPanel}
+      onOpenLinkedKanbanPanel={options.onOpenComposerKanbanPanel}
       reviewPrompt={options.reviewPrompt}
       onReviewPromptClose={options.onReviewPromptClose}
       onReviewPromptShowPreset={options.onReviewPromptShowPreset}
