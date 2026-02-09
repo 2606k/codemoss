@@ -33,6 +33,7 @@ mod prompts;
 mod remote_backend;
 mod rules;
 mod settings;
+mod skills;
 mod state;
 mod storage;
 mod shared;
