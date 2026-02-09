@@ -30,4 +30,4 @@ CodexMonitor.zip
 release-local
 CLAUDE.md
 AGENTS.md
-.claude
+.claude.github/workflows/release.yml
