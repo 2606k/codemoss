@@ -93,6 +93,7 @@ type SidebarProps = {
   onWorkspaceDrop: (event: React.DragEvent<HTMLElement>) => void;
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
+  onOpenMemory: () => void;
 };
 
 export function Sidebar({
@@ -149,6 +150,7 @@ export function Sidebar({
   onWorkspaceDrop,
   appMode,
   onAppModeChange,
+  onOpenMemory,
 }: SidebarProps) {
   const { t } = useTranslation();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(
@@ -543,7 +545,7 @@ export function Sidebar({
         onScroll={updateScrollFade}
         ref={sidebarBodyRef}
       >
-        <SidebarMarketLinks />
+        <SidebarMarketLinks onOpenMemory={onOpenMemory} />
         <div className="sidebar-section-header">
           <div className="sidebar-section-title">{t("sidebar.projects")}</div>
           <button

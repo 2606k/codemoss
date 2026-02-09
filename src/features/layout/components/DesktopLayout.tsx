@@ -12,7 +12,7 @@ type DesktopLayoutProps = {
   showKanban: boolean;
   kanbanNode: ReactNode;
   topbarLeftNode: ReactNode;
-  centerMode: "chat" | "diff" | "editor";
+  centerMode: "chat" | "diff" | "editor" | "memory";
   messagesNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
@@ -55,6 +55,7 @@ export function DesktopLayout({
   const diffLayerRef = useRef<HTMLDivElement | null>(null);
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
   const editorLayerRef = useRef<HTMLDivElement | null>(null);
+  const memoryLayerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const diffLayer = diffLayerRef.current;
@@ -95,6 +96,8 @@ export function DesktopLayout({
     );
   }
 
+  const isMemoryMode = centerMode === "memory";
+
   return (
     <>
       {sidebarNode}
@@ -107,60 +110,77 @@ export function DesktopLayout({
       />
 
       <section className="main">
-        {updateToastNode}
-        {errorToastsNode}
-        {showHome && homeNode}
-
-        {showWorkspace && (
-          <>
-            <MainTopbar leftNode={topbarLeftNode} />
-            {approvalToastsNode}
-            <div className="content">
-              <div
-                className={`content-layer ${centerMode === "diff" ? "is-active" : "is-hidden"}`}
-                aria-hidden={centerMode !== "diff"}
-                ref={diffLayerRef}
-              >
-                {gitDiffViewerNode}
-              </div>
-              <div
-                className={`content-layer ${centerMode === "editor" ? "is-active" : "is-hidden"}`}
-                aria-hidden={centerMode !== "editor"}
-                ref={editorLayerRef}
-              >
-                {fileViewPanelNode}
-              </div>
-              <div
-                className={`content-layer ${centerMode === "chat" ? "is-active" : "is-hidden"}`}
-                aria-hidden={centerMode !== "chat"}
-                ref={chatLayerRef}
-              >
-                {messagesNode}
-              </div>
-            </div>
-
-            <div
-              className="right-panel-resizer"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize right panel"
-              onMouseDown={onRightPanelResizeStart}
+        {isMemoryMode && (
+          <div
+            ref={memoryLayerRef}
+            style={{ position: "absolute", inset: 0, zIndex: 10 }}
+          >
+            <iframe
+              src="http://localhost:37777/"
+              title="Long-term Memory"
+              style={{ width: "100%", height: "100%", border: "none" }}
             />
-            <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
-              <div className="right-panel-top">{gitDiffPanelNode}</div>
-              <div
-                className="right-panel-divider"
-                role="separator"
-                aria-orientation="horizontal"
-                aria-label="Resize plan panel"
-                onMouseDown={onPlanPanelResizeStart}
-              />
-              <div className="right-panel-bottom">{planPanelNode}</div>
-            </div>
+          </div>
+        )}
 
-            {composerNode}
-            {terminalDockNode}
-            {debugPanelNode}
+        {!isMemoryMode && (
+          <>
+            {updateToastNode}
+            {errorToastsNode}
+            {showHome && homeNode}
+
+            {showWorkspace && (
+              <>
+                <MainTopbar leftNode={topbarLeftNode} />
+                {approvalToastsNode}
+                <div className="content">
+                  <div
+                    className={`content-layer ${centerMode === "diff" ? "is-active" : "is-hidden"}`}
+                    aria-hidden={centerMode !== "diff"}
+                    ref={diffLayerRef}
+                  >
+                    {gitDiffViewerNode}
+                  </div>
+                  <div
+                    className={`content-layer ${centerMode === "editor" ? "is-active" : "is-hidden"}`}
+                    aria-hidden={centerMode !== "editor"}
+                    ref={editorLayerRef}
+                  >
+                    {fileViewPanelNode}
+                  </div>
+                  <div
+                    className={`content-layer ${centerMode === "chat" ? "is-active" : "is-hidden"}`}
+                    aria-hidden={centerMode !== "chat"}
+                    ref={chatLayerRef}
+                  >
+                    {messagesNode}
+                  </div>
+                </div>
+
+                <div
+                  className="right-panel-resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize right panel"
+                  onMouseDown={onRightPanelResizeStart}
+                />
+                <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
+                  <div className="right-panel-top">{gitDiffPanelNode}</div>
+                  <div
+                    className="right-panel-divider"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Resize plan panel"
+                    onMouseDown={onPlanPanelResizeStart}
+                  />
+                  <div className="right-panel-bottom">{planPanelNode}</div>
+                </div>
+
+                {composerNode}
+                {terminalDockNode}
+                {debugPanelNode}
+              </>
+            )}
           </>
         )}
       </section>
