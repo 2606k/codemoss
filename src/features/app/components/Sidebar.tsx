@@ -22,6 +22,8 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 
@@ -560,11 +562,11 @@ export function Sidebar({
                 : t("sidebar.collapseAllSections")
             }
           >
-            <span
-              className={`codicon ${isAllCollapsed ? "codicon-expand-all" : "codicon-collapse-all"}`}
-              aria-hidden
-              style={{ fontSize: "14px" }}
-            />
+            {isAllCollapsed ? (
+              <ChevronsUpDown size={14} aria-hidden />
+            ) : (
+              <ChevronsDownUp size={14} aria-hidden />
+            )}
           </button>
           <button
             className="sidebar-title-add"

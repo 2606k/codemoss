@@ -51,8 +51,8 @@ const en = {
   // Sidebar
   sidebar: {
     projects: "Projects",
-    mcpMarket: "MCP Market",
-    skillsMarket: "Skills Market",
+    mcpSkillsMarket: "MCP & Skills Market",
+    longTermMemory: "Long-term Memory",
     pluginMarket: "Plugin Market",
     comingSoon: "Coming Soon",
     comingSoonMessage: "This feature is under development, stay tuned",
@@ -959,6 +959,11 @@ const en = {
     loading: "Loading...",
     searchOlder: "Search older...",
     loadOlder: "Load older...",
+    sessionStopped: "Session stopped.",
+    turnFailed: "Turn failed.",
+    turnFailedWithMessage: "Turn failed: {{message}}",
+    turnFailedToStart: "Turn failed to start.",
+    turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
   },
 
   // Workspace

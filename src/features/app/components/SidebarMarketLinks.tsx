@@ -1,5 +1,5 @@
-import Blocks from "lucide-react/dist/esm/icons/blocks";
 import Box from "lucide-react/dist/esm/icons/box";
+import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle";
 import { useTranslation } from "react-i18next";
 import { pushErrorToast } from "../../../services/toasts";
@@ -23,8 +23,8 @@ export function SidebarMarketLinks() {
         onClick={handleClick}
         data-tauri-drag-region="false"
       >
-        <Blocks className="sidebar-market-icon" />
-        <span>{t("sidebar.mcpMarket")}</span>
+        <Box className="sidebar-market-icon" />
+        <span>{t("sidebar.mcpSkillsMarket")}</span>
       </button>
       <button
         type="button"
@@ -32,8 +32,8 @@ export function SidebarMarketLinks() {
         onClick={handleClick}
         data-tauri-drag-region="false"
       >
-        <Box className="sidebar-market-icon" />
-        <span>{t("sidebar.skillsMarket")}</span>
+        <BrainCircuit className="sidebar-market-icon" />
+        <span>{t("sidebar.longTermMemory")}</span>
       </button>
       <button
         type="button"

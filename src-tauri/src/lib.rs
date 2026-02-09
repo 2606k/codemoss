@@ -77,6 +77,11 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+            // Hide the menu bar on Windows while keeping accelerator shortcuts active.
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide_menu();
+            }
             Ok(())
         });
 
