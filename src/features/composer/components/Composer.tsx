@@ -137,7 +137,12 @@ type ComposerProps = {
   onReviewPromptConfirmCommit?: () => Promise<void>;
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
-  linkedKanbanPanels?: { id: string; name: string; workspaceId: string }[];
+  linkedKanbanPanels?: {
+    id: string;
+    name: string;
+    workspaceId: string;
+    createdAt?: number;
+  }[];
   selectedLinkedKanbanPanelId?: string | null;
   onSelectLinkedKanbanPanel?: (panelId: string | null) => void;
   onOpenLinkedKanbanPanel?: (panelId: string) => void;
@@ -1151,9 +1156,9 @@ export function Composer({
                               type="button"
                               className="composer-kanban-strip-link"
                               onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
+                              aria-label={`${panel.name} ${t("kanban.composer.link")}`}
                             >
                               <ExternalLink size={12} />
-                              <span>{t("kanban.composer.link")}</span>
                             </button>
                           </div>
                         );
@@ -1238,9 +1243,9 @@ export function Composer({
                             type="button"
                             className="composer-kanban-strip-link"
                             onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
+                            aria-label={`${panel.name} ${t("kanban.composer.link")}`}
                           >
                             <ExternalLink size={12} />
-                            <span>{t("kanban.composer.link")}</span>
                           </button>
                         </div>
                       );

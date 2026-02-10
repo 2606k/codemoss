@@ -227,3 +227,38 @@ git checkout -- src/features/composer/components/ComposerContextMenuPopover.test
 
 ### 结论
 本轮仅做结构性提纯，无行为变更，功能路径与交互结果保持不变。
+
+---
+
+## 新增：Kanban 显示优化（本轮）
+
+### 目标
+1. 在 `kanban` 数量较多时节省横向空间。  
+2. `kanban` 在 Composer 中按创建时间倒序展示（最新在前）。
+
+### 实施内容
+
+1. Link 按钮去文案，仅保留 icon
+- 文件：`src/features/composer/components/Composer.tsx`
+- 改动：展开态与折叠态两个看板条目中的 link 按钮，移除文字节点，仅保留 `ExternalLink` icon
+- 可访问性：新增 `aria-label`，例如 `"<panelName> link"`，避免只剩 icon 后语义缺失
+
+2. 看板按创建时间倒序
+- 文件：`src/App.tsx`
+- 改动：`composerLinkedKanbanPanels` 从按 `sortOrder` 改为按 `createdAt` 倒序
+- 排序策略：`b.createdAt - a.createdAt || a.sortOrder - b.sortOrder`
+- 同时透传 `createdAt` 字段到 Composer 链路
+
+3. 类型同步
+- 文件：`src/features/composer/components/Composer.tsx`
+- 文件：`src/features/layout/hooks/useLayoutNodes.tsx`
+- 改动：`linkedKanbanPanels / composerLinkedKanbanPanels` 类型增加 `createdAt?: number`
+
+4. 样式压缩
+- 文件：`src/styles/composer.css`
+- 改动：`composer-kanban-strip-link` 设为 icon-only 紧凑样式（固定宽度、居中、去 gap）
+
+### 验证
+1. `npm run typecheck`：通过  
+2. `npm run lint`：通过（仅仓库既有 warning）  
+3. `npm run test -- src/features/composer/components/ComposerContextMenuPopover.test.tsx src/features/composer/components/ComposerEditorHelpers.test.tsx`：通过（6/6）
