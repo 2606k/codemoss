@@ -494,9 +494,15 @@ export function useThreadMessaging({
       // Detect engine switch: if current thread has a different engine, create new thread
       const currentEngine = activeEngine === "claude" ? "claude" : "codex";
       if (activeThreadId) {
-        const threadEngine = getThreadEngine(activeWorkspace.id, activeThreadId);
-        // If thread has an engine set and it differs from current selection, create new thread
-        if (threadEngine && threadEngine !== currentEngine) {
+        const isClaudeThreadId =
+          activeThreadId.startsWith("claude:") ||
+          activeThreadId.startsWith("claude-pending-");
+        const storedThreadEngine = getThreadEngine(activeWorkspace.id, activeThreadId);
+        const threadEngine = isClaudeThreadId
+          ? "claude"
+          : (storedThreadEngine ?? "codex");
+        // If current thread differs from current selection, create a new thread
+        if (threadEngine !== currentEngine) {
           onDebug?.({
             id: `${Date.now()}-client-engine-switch`,
             timestamp: Date.now(),
@@ -505,6 +511,7 @@ export function useThreadMessaging({
             payload: {
               workspaceId: activeWorkspace.id,
               oldThreadId: activeThreadId,
+              oldEngineFromStore: storedThreadEngine ?? null,
               oldEngine: threadEngine,
               newEngine: currentEngine,
             },
