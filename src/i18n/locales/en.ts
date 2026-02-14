@@ -1365,6 +1365,8 @@ const en = {
       linked: "Linked",
       processing: "Processing...",
       generateTitle: "Generate title",
+      generateTitleFailed: "Failed to generate title",
+      generateTitleTimeout: "Title generation timed out, please try again",
     },
     conversation: {
       close: "Close",

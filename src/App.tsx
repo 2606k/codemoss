@@ -3289,6 +3289,8 @@ function MainApp() {
               kanbanConversationWidth={kanbanConversationWidth}
               onKanbanConversationResizeStart={onKanbanConversationResizeStart}
               gitPanelNode={gitDiffPanelNode}
+              terminalOpen={terminalOpen}
+              onToggleTerminal={handleToggleTerminal}
             />
           ) : null
         }
