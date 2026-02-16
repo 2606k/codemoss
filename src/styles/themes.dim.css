@@ -24,6 +24,39 @@
   --surface-context-core: #20232a;
   --surface-popover: #20232a;
 
+  /* @coss/ui standard theme variables (bridge) */
+  --background: #20232a;
+  --foreground: #e6e7ea;
+  --card: #2e3038;
+  --card-foreground: #e6e7ea;
+  --popover: #20232a;
+  --popover-foreground: #e6e7ea;
+  --primary: #7a9dcc;
+  --primary-foreground: #20232a;
+  --secondary: #34363e;
+  --secondary-foreground: #e6e7ea;
+  --muted: #34363e;
+  --muted-foreground: #b3b3b3;
+  --accent: #2e3038;
+  --accent-foreground: #e6e7ea;
+  --destructive: #ff6e6e;
+  --destructive-foreground: #ffffff;
+  --success: #78ebbe;
+  --success-foreground: #20232a;
+  --warning: #ffaf55;
+  --warning-foreground: #20232a;
+  --info: #7a9dcc;
+  --info-foreground: #20232a;
+  --border: #2e3038;
+  --input: #34363e;
+  --ring: #4a8caa;
+  --radius: 0.5rem;
+  --sidebar-background: #292c33;
+  --sidebar-foreground: #b3b3b3;
+  --sidebar-border: #2e3038;
+  --sidebar-accent: #2e3038;
+  --sidebar-accent-foreground: #ffffff;
+
   /* 滚动条颜色 - Scrollbar colors */
   --scrollbar-track: #1e2028;
   --scrollbar-thumb: #3e4048;

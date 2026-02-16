@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import "./styles/globals.css";
 import "./styles/base.css";
 import "./styles/buttons.css";
 import "./styles/sidebar.css";
@@ -3666,6 +3667,50 @@ function MainApp() {
         compactEmptyCodexNode={compactEmptyCodexNode}
         compactEmptyGitNode={compactEmptyGitNode}
         compactGitBackNode={compactGitBackNode}
+        settingsOpen={settingsOpen}
+        settingsNode={
+          settingsOpen ? (
+            <Suspense fallback={null}>
+              <SettingsView
+                workspaceGroups={workspaceGroups}
+                groupedWorkspaces={groupedWorkspaces}
+                ungroupedLabel={ungroupedLabel}
+                onMoveWorkspace={handleMoveWorkspace}
+                onDeleteWorkspace={(workspaceId) => {
+                  void removeWorkspace(workspaceId);
+                }}
+                onCreateWorkspaceGroup={createWorkspaceGroup}
+                onRenameWorkspaceGroup={renameWorkspaceGroup}
+                onMoveWorkspaceGroup={moveWorkspaceGroup}
+                onDeleteWorkspaceGroup={deleteWorkspaceGroup}
+                onAssignWorkspaceGroup={assignWorkspaceGroup}
+                reduceTransparency={reduceTransparency}
+                onToggleTransparency={setReduceTransparency}
+                appSettings={appSettings}
+                openAppIconById={openAppIconById}
+                onUpdateAppSettings={async (next) => {
+                  await queueSaveSettings(next);
+                }}
+                onRunDoctor={doctor}
+                onUpdateWorkspaceCodexBin={async (id, codexBin) => {
+                  await updateWorkspaceCodexBin(id, codexBin);
+                }}
+                onUpdateWorkspaceSettings={async (id, settings) => {
+                  await updateWorkspaceSettings(id, settings);
+                }}
+                scaleShortcutTitle={scaleShortcutTitle}
+                scaleShortcutText={scaleShortcutText}
+                onTestNotificationSound={handleTestNotificationSound}
+                dictationModelStatus={dictationModel.status}
+                onDownloadDictationModel={dictationModel.download}
+                onCancelDictationDownload={dictationModel.cancel}
+                onRemoveDictationModel={dictationModel.remove}
+                onClose={closeSettings}
+                initialSection={settingsSection ?? undefined}
+              />
+            </Suspense>
+          ) : null
+        }
         onSidebarResizeStart={onSidebarResizeStart}
         onRightPanelResizeStart={onRightPanelResizeStart}
         onPlanPanelResizeStart={onPlanPanelResizeStart}
@@ -3716,45 +3761,6 @@ function MainApp() {
         onClonePromptClearCopiesFolder={clearCloneCopiesFolder}
         onClonePromptCancel={cancelClonePrompt}
         onClonePromptConfirm={confirmClonePrompt}
-        settingsOpen={settingsOpen}
-        settingsSection={settingsSection ?? undefined}
-        onCloseSettings={closeSettings}
-        SettingsViewComponent={SettingsView}
-        settingsProps={{
-          workspaceGroups,
-          groupedWorkspaces,
-          ungroupedLabel,
-          onMoveWorkspace: handleMoveWorkspace,
-          onDeleteWorkspace: (workspaceId) => {
-            void removeWorkspace(workspaceId);
-          },
-          onCreateWorkspaceGroup: createWorkspaceGroup,
-          onRenameWorkspaceGroup: renameWorkspaceGroup,
-          onMoveWorkspaceGroup: moveWorkspaceGroup,
-          onDeleteWorkspaceGroup: deleteWorkspaceGroup,
-          onAssignWorkspaceGroup: assignWorkspaceGroup,
-          reduceTransparency,
-          onToggleTransparency: setReduceTransparency,
-          appSettings,
-          openAppIconById,
-          onUpdateAppSettings: async (next) => {
-            await queueSaveSettings(next);
-          },
-          onRunDoctor: doctor,
-          onUpdateWorkspaceCodexBin: async (id, codexBin) => {
-            await updateWorkspaceCodexBin(id, codexBin);
-          },
-          onUpdateWorkspaceSettings: async (id, settings) => {
-            await updateWorkspaceSettings(id, settings);
-          },
-          scaleShortcutTitle,
-          scaleShortcutText,
-          onTestNotificationSound: handleTestNotificationSound,
-          dictationModelStatus: dictationModel.status,
-          onDownloadDictationModel: dictationModel.download,
-          onCancelDictationDownload: dictationModel.cancel,
-          onRemoveDictationModel: dictationModel.remove,
-        }}
       />
     </div>
   );

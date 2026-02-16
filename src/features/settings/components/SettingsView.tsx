@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -13,6 +17,7 @@ import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+
 import X from "lucide-react/dist/esm/icons/x";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
@@ -456,32 +461,6 @@ export function SettingsView({
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      onClose();
-    };
-
-    const handleCloseShortcut = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    window.addEventListener("keydown", handleCloseShortcut);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("keydown", handleCloseShortcut);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     setCodexPathDraft(appSettings.codexBin ?? "");
@@ -1018,22 +997,20 @@ export function SettingsView({
   };
 
   return (
-    <div className="settings-overlay" role="dialog" aria-modal="true">
-      <div className="settings-backdrop" onClick={onClose} />
-      <div className="settings-window">
-        <div className="settings-titlebar">
-          <div className="settings-title">{t("settings.title")}</div>
-          <button
-            type="button"
-            className="ghost icon-button settings-close"
-            onClick={onClose}
-            aria-label={t("settings.closeSettings")}
-          >
-            <X aria-hidden />
-          </button>
-        </div>
-        <div className="settings-body">
-          <aside className="settings-sidebar">
+    <div className="settings-embedded">
+      <div className="settings-header">
+        <div className="settings-title">{t("settings.title")}</div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClose}
+          aria-label={t("settings.closeSettings")}
+        >
+          <X aria-hidden />
+        </Button>
+      </div>
+      <div className="settings-body">
+        <aside className="settings-sidebar">
             <button
               type="button"
               className={`settings-nav ${activeSection === "vendors" ? "active" : ""}`}
@@ -1127,7 +1104,7 @@ export function SettingsView({
               {t("settings.sidebarAbout")}
             </button>
           </aside>
-          <div className="settings-content">
+          <ScrollArea className="settings-content">
             {activeSection === "projects" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.projectsTitle")}</div>
@@ -1383,21 +1360,15 @@ export function SettingsView({
                       {t("settings.showRemainingLimitsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${
-                      appSettings.usageShowRemaining ? "on" : ""
-                    }`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.usageShowRemaining}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        usageShowRemaining: !appSettings.usageShowRemaining,
+                        usageShowRemaining: checked,
                       })
                     }
-                    aria-pressed={appSettings.usageShowRemaining}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1408,21 +1379,15 @@ export function SettingsView({
                       {t("settings.showMessageAnchorsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${
-                      appSettings.showMessageAnchors ? "on" : ""
-                    }`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.showMessageAnchors}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        showMessageAnchors: !appSettings.showMessageAnchors,
+                        showMessageAnchors: checked,
                       })
                     }
-                    aria-pressed={appSettings.showMessageAnchors}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1431,14 +1396,10 @@ export function SettingsView({
                       {t("settings.reduceTransparencyDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${reduceTransparency ? "on" : ""}`}
-                    onClick={() => onToggleTransparency(!reduceTransparency)}
-                    aria-pressed={reduceTransparency}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  <Switch
+                    checked={reduceTransparency}
+                    onCheckedChange={(checked) => onToggleTransparency(checked)}
+                  />
                 </div>
                 <div className="settings-toggle-row settings-scale-row">
                   <div>
@@ -1604,19 +1565,15 @@ export function SettingsView({
                       {t("settings.notificationSoundsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.notificationSoundsEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.notificationSoundsEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        notificationSoundsEnabled: !appSettings.notificationSoundsEnabled,
+                        notificationSoundsEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.notificationSoundsEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-sound-actions">
                   <button
@@ -1634,19 +1591,15 @@ export function SettingsView({
                       {t("settings.systemNotificationDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.systemNotificationEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.systemNotificationEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        systemNotificationEnabled: !appSettings.systemNotificationEnabled,
+                        systemNotificationEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.systemNotificationEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
               </section>
             )}
@@ -1684,7 +1637,7 @@ export function SettingsView({
                     {t("settings.presetDesc")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.codeFencesSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1693,19 +1646,15 @@ export function SettingsView({
                       {t("settings.expandFencesOnSpaceDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceExpandOnSpace ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceExpandOnSpace}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceExpandOnSpace: !appSettings.composerFenceExpandOnSpace,
+                        composerFenceExpandOnSpace: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceExpandOnSpace}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1714,19 +1663,15 @@ export function SettingsView({
                       {t("settings.expandFencesOnEnterDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceExpandOnEnter ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceExpandOnEnter}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceExpandOnEnter: !appSettings.composerFenceExpandOnEnter,
+                        composerFenceExpandOnEnter: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceExpandOnEnter}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1735,19 +1680,15 @@ export function SettingsView({
                       {t("settings.supportLanguageTagsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceLanguageTags ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceLanguageTags}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceLanguageTags: !appSettings.composerFenceLanguageTags,
+                        composerFenceLanguageTags: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceLanguageTags}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1756,19 +1697,15 @@ export function SettingsView({
                       {t("settings.wrapSelectionInFencesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceWrapSelection ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceWrapSelection}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceWrapSelection: !appSettings.composerFenceWrapSelection,
+                        composerFenceWrapSelection: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceWrapSelection}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1777,22 +1714,17 @@ export function SettingsView({
                       {t("settings.copyBlocksWithoutFencesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerCodeBlockCopyUseModifier ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerCodeBlockCopyUseModifier}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerCodeBlockCopyUseModifier:
-                          !appSettings.composerCodeBlockCopyUseModifier,
+                        composerCodeBlockCopyUseModifier: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerCodeBlockCopyUseModifier}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.pastingSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1801,20 +1733,15 @@ export function SettingsView({
                       {t("settings.autoWrapMultiLinePasteDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceAutoWrapPasteMultiline ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceAutoWrapPasteMultiline}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceAutoWrapPasteMultiline:
-                          !appSettings.composerFenceAutoWrapPasteMultiline,
+                        composerFenceAutoWrapPasteMultiline: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceAutoWrapPasteMultiline}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1823,22 +1750,17 @@ export function SettingsView({
                       {t("settings.autoWrapCodeLikeSingleLinesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceAutoWrapPasteCodeLike ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceAutoWrapPasteCodeLike}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceAutoWrapPasteCodeLike:
-                          !appSettings.composerFenceAutoWrapPasteCodeLike,
+                        composerFenceAutoWrapPasteCodeLike: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceAutoWrapPasteCodeLike}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.listsSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1847,21 +1769,17 @@ export function SettingsView({
                       {t("settings.continueListsOnShiftEnterDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerListContinuation ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerListContinuation}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerListContinuation: !appSettings.composerListContinuation,
+                        composerListContinuation: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerListContinuation}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.historyCompletionSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1870,17 +1788,13 @@ export function SettingsView({
                       {t("settings.historyCompletionDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${historyCompletionEnabled ? "on" : ""}`}
-                    onClick={handleHistoryCompletionToggle}
-                    aria-pressed={historyCompletionEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  <Switch
+                    checked={historyCompletionEnabled}
+                    onCheckedChange={handleHistoryCompletionToggle}
+                  />
                 </div>
                 <HistoryCompletionSettings />
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <ModelMappingSettings reduceTransparency={reduceTransparency} />
               </section>
             )}
@@ -1897,34 +1811,29 @@ export function SettingsView({
                       {t("settings.enableDictationDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.dictationEnabled ? "on" : ""}`}
-                    onClick={() => {
-                      const nextEnabled = !appSettings.dictationEnabled;
+                  <Switch
+                    checked={appSettings.dictationEnabled}
+                    onCheckedChange={(checked) => {
                       void onUpdateAppSettings({
                         ...appSettings,
-                        dictationEnabled: nextEnabled,
+                        dictationEnabled: checked,
                       });
                       if (
-                        !nextEnabled &&
+                        !checked &&
                         dictationModelStatus?.state === "downloading" &&
                         onCancelDictationDownload
                       ) {
                         onCancelDictationDownload();
                       }
                       if (
-                        nextEnabled &&
+                        checked &&
                         dictationModelStatus?.state === "missing" &&
                         onDownloadDictationModel
                       ) {
                         onDownloadDictationModel();
                       }
                     }}
-                    aria-pressed={appSettings.dictationEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-field">
                   <label className="settings-field-label" htmlFor="dictation-model">
@@ -2192,7 +2101,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut("cmd+ctrl+a")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.composerSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.composerSubDescription")}
@@ -2317,7 +2226,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut(getDefaultInterruptShortcut())}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.panelsSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.panelsSubDescription")}
@@ -2442,7 +2351,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut("cmd+shift+t")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.navigationSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.navigationSubDescription")}
@@ -2734,19 +2643,15 @@ export function SettingsView({
                       {t("settings.preloadGitDiffsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.preloadGitDiffs ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.preloadGitDiffs}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        preloadGitDiffs: !appSettings.preloadGitDiffs,
+                        preloadGitDiffs: checked,
                       })
                     }
-                    aria-pressed={appSettings.preloadGitDiffs}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
               </section>
             )}
@@ -3252,19 +3157,15 @@ export function SettingsView({
                       {t("settings.multiAgentDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalCollabEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalCollabEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalCollabEnabled: !appSettings.experimentalCollabEnabled,
+                        experimentalCollabEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalCollabEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -3273,22 +3174,15 @@ export function SettingsView({
                       {t("settings.collaborationModesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${
-                      appSettings.experimentalCollaborationModesEnabled ? "on" : ""
-                    }`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalCollaborationModesEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalCollaborationModesEnabled:
-                          !appSettings.experimentalCollaborationModesEnabled,
+                        experimentalCollaborationModesEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalCollaborationModesEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -3297,19 +3191,15 @@ export function SettingsView({
                       {t("settings.backgroundTerminalDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalUnifiedExecEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalUnifiedExecEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalUnifiedExecEnabled: !appSettings.experimentalUnifiedExecEnabled,
+                        experimentalUnifiedExecEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalUnifiedExecEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -3318,25 +3208,20 @@ export function SettingsView({
                       {t("settings.steerModeDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalSteerEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalSteerEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalSteerEnabled: !appSettings.experimentalSteerEnabled,
+                        experimentalSteerEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalSteerEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
               </section>
             )}
-          </div>
+          </ScrollArea>
         </div>
       </div>
-    </div>
   );
 }

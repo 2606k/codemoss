@@ -55,6 +55,39 @@
   --status-unknown: rgba(17, 20, 28, 0.25);
   --select-caret: rgba(15, 23, 36, 0.45);
 
+  /* @coss/ui standard theme variables (bridge) */
+  --background: rgba(238, 241, 246, 0.9);
+  --foreground: #1a1d24;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #1a1d24;
+  --popover: rgba(255, 255, 255, 0.99);
+  --popover-foreground: #1a1d24;
+  --primary: rgba(45, 93, 170, 0.7);
+  --primary-foreground: #ffffff;
+  --secondary: rgba(15, 23, 36, 0.08);
+  --secondary-foreground: #1a1d24;
+  --muted: rgba(15, 23, 36, 0.08);
+  --muted-foreground: rgba(17, 20, 28, 0.7);
+  --accent: rgba(15, 23, 36, 0.06);
+  --accent-foreground: #1a1d24;
+  --destructive: rgba(200, 45, 45, 0.9);
+  --destructive-foreground: #ffffff;
+  --success: rgba(30, 155, 110, 0.9);
+  --success-foreground: #ffffff;
+  --warning: rgba(215, 120, 20, 0.9);
+  --warning-foreground: #1a1d24;
+  --info: rgba(45, 93, 170, 0.7);
+  --info-foreground: #ffffff;
+  --border: rgba(15, 23, 36, 0.06);
+  --input: rgba(15, 23, 36, 0.08);
+  --ring: rgba(77, 153, 255, 0.5);
+  --radius: 0.5rem;
+  --sidebar-background: rgba(246, 247, 250, 0.82);
+  --sidebar-foreground: rgba(17, 20, 28, 0.7);
+  --sidebar-border: rgba(15, 23, 36, 0.06);
+  --sidebar-accent: rgba(255, 255, 255, 0.72);
+  --sidebar-accent-foreground: #0e1118;
+
   /* 滚动条颜色 - Scrollbar colors */
   --scrollbar-track: transparent;
   --scrollbar-thumb: rgba(15, 23, 36, 0.18);
