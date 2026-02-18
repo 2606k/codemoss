@@ -979,7 +979,7 @@ const en = {
     open: "open",
     // Panel tabs
     diffMode: "Diff",
-    logMode: "Log",
+    logMode: "Git",
     issuesMode: "Issues",
     prsMode: "PRs",
     // Worktree operations

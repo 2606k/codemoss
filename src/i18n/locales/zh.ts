@@ -968,7 +968,7 @@ const zh = {
     open: "未关闭",
     // 面板标签
     diffMode: "差异Diff",
-    logMode: "日志",
+    logMode: "Git",
     issuesMode: "议题",
     prsMode: "拉取请求",
     // 工作树操作
