@@ -19,6 +19,9 @@ use crate::types::{
     GitHubPullRequestsResponse, GitLogResponse,
 };
 use crate::utils::{git_env_path, normalize_git_path, resolve_git_binary};
+use validation::validate_local_branch_name;
+
+mod validation;
 
 const INDEX_SKIP_WORKTREE_FLAG: u16 = 0x4000;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
@@ -82,6 +85,26 @@ fn collect_commit_refs_map(repo: &Repository) -> HashMap<Oid, Vec<String>> {
     map
 }
 
+fn open_repository_at_root(repo_root: &Path) -> Result<Repository, String> {
+    Repository::open_ext(
+        repo_root,
+        git2::RepositoryOpenFlags::NO_SEARCH,
+        std::iter::empty::<&Path>(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn paginate_history_commits(
+    commits: Vec<GitHistoryCommit>,
+    offset: usize,
+    limit: usize,
+) -> (Vec<GitHistoryCommit>, usize, bool) {
+    let total = commits.len();
+    let page: Vec<GitHistoryCommit> = commits.into_iter().skip(offset).take(limit).collect();
+    let has_more = offset.saturating_add(page.len()) < total;
+    (page, total, has_more)
+}
+
 fn parse_remote_branch(name: &str) -> Option<(String, String)> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -98,18 +121,6 @@ fn parse_remote_branch(name: &str) -> Option<(String, String)> {
         return None;
     }
     Some((remote.to_string(), branch.to_string()))
-}
-
-fn validate_local_branch_name(name: &str) -> Result<String, String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err("Branch name cannot be empty.".to_string());
-    }
-    let full_ref = format!("refs/heads/{trimmed}");
-    if !git2::Reference::is_valid_name(&full_ref) {
-        return Err(format!("Invalid branch name: {trimmed}"));
-    }
-    Ok(trimmed.to_string())
 }
 
 fn encode_image_base64(data: &[u8]) -> Option<String> {
@@ -168,7 +179,7 @@ fn action_paths_for_file(repo_root: &Path, path: &str) -> Vec<String> {
         return Vec::new();
     }
 
-    let repo = match Repository::open(repo_root) {
+    let repo = match open_repository_at_root(repo_root) {
         Ok(repo) => repo,
         Err(_) => return vec![target],
     };
@@ -236,7 +247,7 @@ fn parse_upstream_ref(name: &str) -> Option<(String, String)> {
 }
 
 fn upstream_remote_and_branch(repo_root: &Path) -> Result<Option<(String, String)>, String> {
-    let repo = Repository::open(repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(repo_root)?;
     let head = match repo.head() {
         Ok(head) => head,
         Err(_) => return Ok(None),
@@ -343,7 +354,7 @@ fn build_combined_diff(diff: &git2::Diff) -> String {
 }
 
 fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
-    let repo = Repository::open(repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(repo_root)?;
     let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
 
     let mut options = DiffOptions::new();
@@ -378,7 +389,7 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
 }
 
 fn github_repo_from_path(path: &Path) -> Result<String, String> {
-    let repo = Repository::open(path).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(path)?;
     let remotes = repo.remotes().map_err(|e| e.to_string())?;
     let name = if remotes.iter().any(|remote| remote == Some("origin")) {
         "origin".to_string()
@@ -500,7 +511,7 @@ pub(crate) async fn get_git_status(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
 
     let branch_name = repo
         .head()
@@ -911,7 +922,7 @@ pub(crate) async fn get_git_diffs(
 
     let repo_root = resolve_git_root(&entry)?;
     tokio::task::spawn_blocking(move || {
-        let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+        let repo = open_repository_at_root(&repo_root)?;
         let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
 
         let mut options = DiffOptions::new();
@@ -1058,8 +1069,11 @@ pub(crate) async fn get_git_file_full_diff(
     }
 
     tokio::task::spawn_blocking(move || {
-        let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
-        let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+        let repo = open_repository_at_root(&repo_root)?;
+        let head_tree = repo
+            .head()
+            .ok()
+            .and_then(|head| head.peel_to_tree().ok());
 
         let mut options = DiffOptions::new();
         options
@@ -1115,7 +1129,7 @@ pub(crate) async fn get_git_log(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let max_items = limit.unwrap_or(40);
     let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
     revwalk.push_head().map_err(|e| e.to_string())?;
@@ -1208,6 +1222,7 @@ pub(crate) async fn get_git_commit_history(
     author: Option<String>,
     date_from: Option<i64>,
     date_to: Option<i64>,
+    snapshot_id: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
     state: State<'_, AppState>,
@@ -1220,7 +1235,7 @@ pub(crate) async fn get_git_commit_history(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
     revwalk
         .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
@@ -1264,9 +1279,37 @@ pub(crate) async fn get_git_commit_history(
 
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(100).clamp(1, 500);
+    let provided_snapshot_id = snapshot_id.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     let query_filter = trim_lowercase(query);
     let author_filter = trim_lowercase(author);
     let refs_map = collect_commit_refs_map(&repo);
+    let head_sha = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .map(|oid| oid.to_string())
+        .unwrap_or_else(|| "detached".to_string());
+    let current_snapshot_id = format!(
+        "{}:{}:{}:{}:{}:{}",
+        head_sha,
+        branch_filter.clone().unwrap_or_else(|| "HEAD".to_string()),
+        query_filter.clone().unwrap_or_default(),
+        author_filter.clone().unwrap_or_default(),
+        date_from.unwrap_or_default(),
+        date_to.unwrap_or_default()
+    );
+    if let Some(previous_snapshot_id) = provided_snapshot_id {
+        if previous_snapshot_id != current_snapshot_id {
+            return Err("History snapshot expired. Please refresh commits.".to_string());
+        }
+    }
 
     let mut filtered = Vec::new();
     for oid_result in revwalk {
@@ -1322,33 +1365,44 @@ pub(crate) async fn get_git_commit_history(
         });
     }
 
-    let total = filtered.len();
-    let commits: Vec<GitHistoryCommit> = filtered.into_iter().skip(offset).take(limit).collect();
-    let has_more = offset.saturating_add(commits.len()) < total;
-    let head_sha = repo
-        .head()
-        .ok()
-        .and_then(|head| head.target())
-        .map(|oid| oid.to_string())
-        .unwrap_or_else(|| "detached".to_string());
-    let snapshot_id = format!(
-        "{}:{}:{}:{}:{}:{}",
-        head_sha,
-        branch_filter.unwrap_or_else(|| "HEAD".to_string()),
-        query_filter.unwrap_or_default(),
-        author_filter.unwrap_or_default(),
-        date_from.unwrap_or_default(),
-        date_to.unwrap_or_default()
-    );
-
+    let (commits, total, has_more) = paginate_history_commits(filtered, offset, limit);
     Ok(GitHistoryResponse {
-        snapshot_id,
+        snapshot_id: current_snapshot_id,
         total,
         offset,
         limit,
         has_more,
         commits,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn resolve_git_commit_ref(
+    workspace_id: String,
+    target: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        return Err("Commit target cannot be empty.".to_string());
+    }
+
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = open_repository_at_root(&repo_root)?;
+    let object = repo
+        .revparse_single(trimmed)
+        .map_err(|_| format!("Commit or ref not found: {trimmed}"))?;
+    let commit = object
+        .peel_to_commit()
+        .map_err(|_| format!("Target does not resolve to a commit: {trimmed}"))?;
+    Ok(commit.id().to_string())
 }
 
 #[tauri::command]
@@ -1366,7 +1420,7 @@ pub(crate) async fn get_git_commit_details(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let oid = Oid::from_str(commit_hash.trim()).map_err(|e| e.to_string())?;
     let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
     let commit_tree = commit.tree().map_err(|e| e.to_string())?;
@@ -1498,7 +1552,7 @@ pub(crate) async fn get_git_commit_diff(
         .clone();
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let oid = git2::Oid::from_str(&sha).map_err(|e| e.to_string())?;
     let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
     let commit_tree = commit.tree().map_err(|e| e.to_string())?;
@@ -1604,7 +1658,7 @@ pub(crate) async fn get_git_remote(
         .clone();
 
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let remotes = repo.remotes().map_err(|e| e.to_string())?;
     let name = if remotes.iter().any(|remote| remote == Some("origin")) {
         "origin".to_string()
@@ -1867,7 +1921,7 @@ pub(crate) async fn list_git_branches(
         .ok_or("workspace not found")?
         .clone();
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let current_branch = repo
         .head()
         .ok()
@@ -1973,7 +2027,7 @@ pub(crate) async fn checkout_git_branch(
 
     let repo_root = resolve_git_root(&entry)?;
     let local_name_to_track = {
-        let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+        let repo = open_repository_at_root(&repo_root)?;
 
         let mut status_options = StatusOptions::new();
         status_options
@@ -2037,7 +2091,7 @@ pub(crate) async fn create_git_branch(
         .ok_or("workspace not found")?
         .clone();
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let valid_name = validate_local_branch_name(&name)?;
     let head = repo.head().map_err(|e| e.to_string())?;
     let target = head.peel_to_commit().map_err(|e| e.to_string())?;
@@ -2059,7 +2113,7 @@ pub(crate) async fn create_git_branch_from_branch(
         .ok_or("workspace not found")?
         .clone();
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let valid_name = validate_local_branch_name(&name)?;
     let source_name = source_branch.trim();
     if source_name.is_empty() {
@@ -2103,7 +2157,7 @@ pub(crate) async fn create_git_branch_from_commit(
         .ok_or("workspace not found")?
         .clone();
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let repo = open_repository_at_root(&repo_root)?;
     let valid_name = validate_local_branch_name(&name)?;
     let oid = Oid::from_str(commit_hash.trim()).map_err(|e| e.to_string())?;
     let target = repo.find_commit(oid).map_err(|e| e.to_string())?;
@@ -2177,6 +2231,7 @@ pub(crate) async fn merge_git_branch(
 mod tests {
     use super::*;
     use std::fs;
+    use validation::validate_local_branch_name;
 
     fn create_temp_repo() -> (PathBuf, Repository) {
         let root = std::env::temp_dir().join(format!("code-moss-test-{}", uuid::Uuid::new_v4()));
@@ -2235,5 +2290,47 @@ mod tests {
 
         let paths = action_paths_for_file(&root, "b.txt");
         assert_eq!(paths, vec!["a.txt".to_string(), "b.txt".to_string()]);
+    }
+
+    #[test]
+    fn open_repository_at_root_does_not_search_parent_directories() {
+        let (root, _repo) = create_temp_repo();
+        let nested = root.join("nested").join("non-repo");
+        fs::create_dir_all(&nested).expect("create nested directory");
+
+        let result = open_repository_at_root(&nested);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn paginate_history_commits_respects_offset_and_limit() {
+        let commits = (0..5)
+            .map(|index| GitHistoryCommit {
+                sha: format!("sha-{index}"),
+                short_sha: format!("s{index}"),
+                summary: format!("commit-{index}"),
+                message: format!("message-{index}"),
+                author: "tester".to_string(),
+                author_email: "tester@example.com".to_string(),
+                timestamp: 100 + index as i64,
+                parents: Vec::new(),
+                refs: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let (page, total, has_more) = paginate_history_commits(commits, 2, 2);
+        assert_eq!(total, 5);
+        assert_eq!(page.len(), 2);
+        assert_eq!(page[0].sha, "sha-2");
+        assert_eq!(page[1].sha, "sha-3");
+        assert!(has_more);
+    }
+
+    #[test]
+    fn validate_local_branch_name_allows_slash_and_rejects_invalid() {
+        assert_eq!(
+            validate_local_branch_name("feature/git-log").expect("valid branch"),
+            "feature/git-log".to_string()
+        );
+        assert!(validate_local_branch_name("feature..broken").is_err());
     }
 }

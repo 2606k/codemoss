@@ -888,6 +888,7 @@ const en = {
     historyMerge: "Merge",
     historyCherryPick: "Cherry-pick",
     historyRevert: "Revert",
+    historyJumpToCommit: "Jump",
     historyBranchFromCommit: "Branch From Commit",
     historySearchBranches: "Search branches",
     historySearchCommits: "Search commits",
@@ -900,6 +901,8 @@ const en = {
     historyToggleRemoteBranches: "Toggle remote branches",
     historyToggleLocalGroup: "Toggle local group {{group}}",
     historyToggleRemoteGroup: "Toggle remote group {{group}}",
+    historyBranchBadgeMain: "MAIN",
+    historyBranchBadgeZh: "ZH",
     historyLoadingCommitDetails: "Loading commit details...",
     historySelectCommitToViewDetails: "Select a commit to view details.",
     historyChangedFiles: "Changed Files",
@@ -912,9 +915,16 @@ const en = {
     historyDiffTooLargeTruncated:
       "Diff too large. Preview truncated (total {{lineCount}} lines).",
     historyEmptyDiff: "(empty diff)",
+    historySnapshotExpired: "History snapshot expired. Refreshed with latest commits.",
     historyOverviewDiffLabel: "Diff",
     historyErrorWorkingTreeDirty:
       "Working tree has uncommitted changes. Please commit, stash, or discard changes first.",
+    historyErrorRevertFailed:
+      "Revert failed. Resolve local changes or conflicts, then retry.",
+    historyErrorCherryPickFailed:
+      "Cherry-pick failed. Resolve local changes or conflicts, then retry.",
+    historyErrorMergeFailed:
+      "Merge failed. Resolve local changes or conflicts, then retry.",
     historyWorkingTreeDirtySummary:
       "Working tree has {{count}} file changes.",
     historyChangedFilesCount:
@@ -925,6 +935,7 @@ const en = {
     historyTimeDaysAgo: "{{count}}d ago",
     historyPromptNewBranchName: "New branch name",
     historyPromptNewBranchDefault: "feature/",
+    historyPromptJumpToCommit: "Enter commit hash / branch / tag",
     historyCreateBranchDialogTitle: "Create Branch",
     historyCreateBranchDialogSourceLabel: "Source branch (create from)",
     historyCreateBranchDialogNameLabel: "New branch name",
@@ -946,6 +957,9 @@ const en = {
     historyOperationMergeBranch: "merge branch",
     historyOperationRevertCommit: "revert commit",
     historyOperationCherryPick: "cherry-pick commit",
+    historyOperationSucceeded: "{{operation}} succeeded.",
+    historyOperationFailed: "{{operation}} failed.",
+    historyOperationRetryHint: "You can retry this operation.",
     // Repository selection
     chooseRepo: "Choose a repo for this workspace.",
     scanWorkspace: "Scan workspace",

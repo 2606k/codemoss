@@ -3788,6 +3788,7 @@ function MainApp() {
     <GitHistoryPanel
       workspace={activeWorkspace}
       workspaces={workspaces}
+      groupedWorkspaces={groupedWorkspaces}
       onSelectWorkspace={setActiveWorkspaceId}
       onSelectWorkspacePath={handleSelectWorkspacePathForGitHistory}
       onOpenDiffPath={(path) => handleSelectDiffForPanel(path)}

@@ -253,6 +253,7 @@ pub fn run() {
             git::get_git_log,
             git::get_git_commit_history,
             git::get_git_commit_details,
+            git::resolve_git_commit_ref,
             git::get_git_commit_diff,
             git::get_git_remote,
             git::stage_git_file,

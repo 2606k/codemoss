@@ -388,6 +388,7 @@ export async function getGitCommitHistory(
     author?: string | null;
     dateFrom?: number | null;
     dateTo?: number | null;
+    snapshotId?: string | null;
     offset?: number;
     limit?: number;
   },
@@ -399,8 +400,19 @@ export async function getGitCommitHistory(
     author: options?.author ?? null,
     dateFrom: options?.dateFrom ?? null,
     dateTo: options?.dateTo ?? null,
+    snapshotId: options?.snapshotId ?? null,
     offset: options?.offset ?? 0,
     limit: options?.limit ?? 100,
+  });
+}
+
+export async function resolveGitCommitRef(
+  workspace_id: string,
+  target: string,
+): Promise<string> {
+  return invoke("resolve_git_commit_ref", {
+    workspaceId: workspace_id,
+    target,
   });
 }
 

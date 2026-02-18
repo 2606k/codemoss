@@ -21,6 +21,7 @@ import {
   unstageGitFile,
 } from "../../../services/tauri";
 import type { GitFileStatus } from "../../../types";
+import { localizeGitErrorMessage } from "../gitErrorI18n";
 
 type GitHistoryWorktreePanelProps = {
   workspaceId: string;
@@ -50,6 +51,12 @@ type DiffTreeNode = {
   name: string;
   folders: Map<string, DiffTreeNode>;
   files: GitFileStatus[];
+};
+
+type CollapsedFolder = {
+  key: string;
+  name: string;
+  node: DiffTreeNode;
 };
 
 const EMPTY_STATUS: GitStatusState = {
@@ -113,30 +120,35 @@ function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNo
   return root;
 }
 
+function collapseFolderChain(node: DiffTreeNode): CollapsedFolder {
+  const names = [node.name];
+  let current = node;
+  while (current.files.length === 0 && current.folders.size === 1) {
+    const onlyChild = Array.from(current.folders.values())[0];
+    names.push(onlyChild.name);
+    current = onlyChild;
+  }
+  return {
+    key: current.key,
+    name: names.join("."),
+    node: current,
+  };
+}
+
 function normalizeErrorMessage(
   raw: string | null,
   t: (key: string, options?: Record<string, unknown>) => string,
 ) {
+  const localized = localizeGitErrorMessage(raw, t);
   if (!raw) {
-    return null;
-  }
-  const normalized = raw.toLowerCase();
-  if (
-    normalized.includes("working tree has uncommitted changes") ||
-    normalized.includes("commit your changes or stash them before you switch branches") ||
-    normalized.includes("would be overwritten by checkout")
-  ) {
-    return t("git.historyErrorWorkingTreeDirty");
-  }
-  if (normalized.includes("working tree clean")) {
-    return t("git.workingTreeClean");
+    return localized;
   }
   const isCodexRequired =
     raw.includes("requires the Codex CLI") || raw.includes("workspace not connected");
   if (isCodexRequired) {
     return t("git.commitMessageRequiresCodex");
   }
-  return raw;
+  return localized;
 }
 
 export function GitHistoryWorktreePanel({
@@ -454,24 +466,25 @@ export function GitHistoryWorktreePanel({
         const rows: ReactNode[] = [];
         const folders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
         for (const folder of folders) {
-          const collapsed = collapsedFolders.has(folder.key);
+          const collapsedFolder = collapseFolderChain(folder);
+          const collapsed = collapsedFolders.has(collapsedFolder.key);
           rows.push(
             <button
-              key={folder.key}
+              key={collapsedFolder.key}
               type="button"
               className="git-history-worktree-folder-row"
               style={{ paddingLeft: `${10 + depth * 16}px` }}
-              onClick={() => toggleFolder(folder.key)}
+              onClick={() => toggleFolder(collapsedFolder.key)}
             >
               <span className="git-history-worktree-folder-caret" aria-hidden>
                 {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
               </span>
               <Folder size={13} />
-              <span className="git-history-worktree-folder-name">{folder.name}</span>
+              <span className="git-history-worktree-folder-name">{collapsedFolder.name}</span>
             </button>,
           );
           if (!collapsed) {
-            rows.push(...walk(folder, depth + 1));
+            rows.push(...walk(collapsedFolder.node, depth + 1));
           }
         }
 
