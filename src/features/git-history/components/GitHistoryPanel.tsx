@@ -10,34 +10,42 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import Download from "lucide-react/dist/esm/icons/download";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Cherry from "lucide-react/dist/esm/icons/cherry";
 import Cloud from "lucide-react/dist/esm/icons/cloud";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitBranchPlus from "lucide-react/dist/esm/icons/git-branch-plus";
 import GitCommit from "lucide-react/dist/esm/icons/git-commit-horizontal";
 import GitMerge from "lucide-react/dist/esm/icons/git-merge";
 import HardDrive from "lucide-react/dist/esm/icons/hard-drive";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import LogIn from "lucide-react/dist/esm/icons/log-in";
+import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Repeat from "lucide-react/dist/esm/icons/repeat";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import Search from "lucide-react/dist/esm/icons/search";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import X from "lucide-react/dist/esm/icons/x";
 import type {
   GitBranchListItem,
-  GitCommitDiff,
   GitCommitDetails,
   GitCommitFileChange,
+  GitFileDiff,
   GitHistoryCommit,
   WorkspaceInfo,
 } from "../../../types";
@@ -48,24 +56,25 @@ import {
   createGitBranchFromCommit,
   deleteGitBranch,
   fetchGit,
-  getGitBranchCompareCommits,
+  getGitCommitDiff,
+  getGitDiffs,
+  getGitFileFullDiff,
   getGitStatus,
-  getGitWorktreeDiffFileAgainstBranch,
-  getGitWorktreeDiffAgainstBranch,
   getGitCommitDetails,
   getGitCommitHistory,
+  getGitPushPreview,
   listGitRoots,
   listGitBranches,
   mergeGitBranch,
   pullGit,
   pushGit,
   renameGitBranch,
-  rebaseGitBranch,
-  resolveGitCommitRef,
+  resetGitCommit,
   revertCommit,
   syncGit,
 } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import FileIcon from "../../../components/FileIcon";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 import { isWorkingTreeDirtyBlockingError, localizeGitErrorMessage } from "../gitErrorI18n";
@@ -150,57 +159,41 @@ type GitOperationNoticeState = {
   debugMessage?: string;
 };
 
-type BranchMenuSource = "local" | "remote";
+type GitResetMode = "soft" | "mixed" | "hard" | "keep";
 
-type BranchContextMenuState = {
+type CommitContextMenuState = {
   x: number;
   y: number;
-  branch: GitBranchListItem;
-  source: BranchMenuSource;
+  commitSha: string;
 };
 
-type BranchContextAction = {
-  id: string;
+type CommitActionId =
+  | "copyRevision"
+  | "copyMessage"
+  | "createBranch"
+  | "reset"
+  | "cherryPick"
+  | "revert";
+
+type CommitActionDescriptor = {
+  id: CommitActionId;
   label: string;
-  icon: ReactNode;
-  tone?: "normal" | "danger";
-  disabled?: boolean;
-  disabledReason?: string | null;
-  dividerBefore?: boolean;
-  onSelect: () => void;
+  group: "quick" | "branch" | "write";
+  disabled: boolean;
+  disabledReason?: string;
 };
 
-type WorktreeBranchDiffState = {
-  mode: "worktree";
-  branch: string;
-  compareBranch: string;
-  files: Pick<GitCommitDiff, "path" | "status">[];
-  selectedPath: string | null;
-  loading: boolean;
-  error: string | null;
-  selectedDiff: GitCommitDiff | null;
-  selectedDiffLoading: boolean;
-  selectedDiffError: string | null;
+type PushTargetBranchGroup = {
+  scope: string;
+  label: string;
+  items: string[];
 };
 
-type BranchCompareDirection = "targetOnly" | "currentOnly";
-
-type BranchCompareState = {
-  mode: "branch";
-  branch: string;
-  compareBranch: string;
-  targetOnlyCommits: GitHistoryCommit[];
-  currentOnlyCommits: GitHistoryCommit[];
-  loading: boolean;
-  error: string | null;
-  selectedDirection: BranchCompareDirection | null;
-  selectedCommitSha: string | null;
-  selectedCommitDetails: GitCommitDetails | null;
-  selectedCommitLoading: boolean;
-  selectedCommitError: string | null;
+type WorktreePreviewFile = GitFileDiff & {
+  status: string;
+  additions: number;
+  deletions: number;
 };
-
-type BranchDiffState = WorktreeBranchDiffState | BranchCompareState;
 
 const PAGE_SIZE = 100;
 const DEFAULT_DETAILS_SPLIT = 42;
@@ -213,10 +206,14 @@ const BRANCHES_MIN_WIDTH = 220;
 const COMMITS_MIN_WIDTH = 260;
 const DETAILS_MIN_WIDTH = 260;
 const DISABLE_HISTORY_ACTION_BUTTONS = false;
-const DISABLE_HISTORY_COMMIT_ACTIONS = true;
+const DISABLE_HISTORY_COMMIT_ACTIONS = false;
 const DISABLE_HISTORY_BRANCH_RENAME = true;
 const COMMIT_ROW_ESTIMATED_HEIGHT = 56;
 const SORT_ORDER_FALLBACK = Number.MAX_SAFE_INTEGER;
+const PUSH_TARGET_MENU_MAX_HEIGHT = 220;
+const PUSH_TARGET_MENU_MIN_HEIGHT = 120;
+const PUSH_TARGET_MENU_ESTIMATED_ROW_HEIGHT = 34;
+const PUSH_TARGET_MENU_VIEWPORT_PADDING = 16;
 
 function getSortOrderValue(value: number | null | undefined) {
   return typeof value === "number" ? value : SORT_ORDER_FALLBACK;
@@ -231,6 +228,43 @@ function clamp(value: number, min: number, max: number): number {
     return min;
   }
   return Math.max(min, Math.min(max, value));
+}
+
+function extractCommitBody(summary: string, message: string): string {
+  const normalizedSummary = summary.trim();
+  const normalizedMessage = message.replace(/\r\n/g, "\n").trim();
+  if (!normalizedMessage) {
+    return "";
+  }
+  if (!normalizedSummary) {
+    return normalizedMessage;
+  }
+  if (normalizedMessage === normalizedSummary) {
+    return "";
+  }
+  const messageLines = normalizedMessage.split("\n");
+  if (messageLines[0]?.trim() !== normalizedSummary) {
+    return normalizedMessage;
+  }
+  return messageLines.slice(1).join("\n").trim();
+}
+
+function getCommitActionIcon(actionId: CommitActionId, size: number): ReactNode {
+  const strokeWidth = 1.9;
+  switch (actionId) {
+    case "copyRevision":
+      return <Copy size={size} strokeWidth={strokeWidth} />;
+    case "copyMessage":
+      return <MessageSquareText size={size} strokeWidth={strokeWidth} />;
+    case "createBranch":
+      return <GitBranchPlus size={size} strokeWidth={strokeWidth} />;
+    case "reset":
+      return <RotateCcw size={size} strokeWidth={strokeWidth} />;
+    case "cherryPick":
+      return <Cherry size={size} strokeWidth={strokeWidth} />;
+    case "revert":
+      return <Undo2 size={size} strokeWidth={strokeWidth} />;
+  }
 }
 
 export function getDefaultColumnWidths(containerWidth: number): {
@@ -536,6 +570,12 @@ function ActionSurface({
           onActivate?.();
         }
       }}
+      onContextMenu={(event) => {
+        if (disabled) {
+          return;
+        }
+        onContextMenu?.(event);
+      }}
       onKeyDown={(event) => {
         if (disabled || !onActivate) {
           return;
@@ -545,7 +585,6 @@ function ActionSurface({
           onActivate();
         }
       }}
-      onContextMenu={onContextMenu}
     >
       {children}
     </div>
@@ -775,6 +814,7 @@ export function GitHistoryPanel({
   const commitListRef = useRef<HTMLDivElement | null>(null);
   const historySnapshotIdRef = useRef<string | null>(null);
   const createBranchNameInputRef = useRef<HTMLInputElement | null>(null);
+  const commitFullDiffCacheRef = useRef(new Map<string, Map<string, string>>());
   const initialColumnWidths = useMemo(
     () =>
       getDefaultColumnWidths(
@@ -818,7 +858,9 @@ export function GitHistoryPanel({
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [selectedFileKey, setSelectedFileKey] = useState<string | null>(null);
   const [previewFileKey, setPreviewFileKey] = useState<string | null>(null);
-  const [comparePreviewFileKey, setComparePreviewFileKey] = useState<string | null>(null);
+  const [worktreePreviewFile, setWorktreePreviewFile] = useState<WorktreePreviewFile | null>(null);
+  const [worktreePreviewLoading, setWorktreePreviewLoading] = useState(false);
+  const [worktreePreviewError, setWorktreePreviewError] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   const [detailsSplitRatio, setDetailsSplitRatio] = useState(() =>
@@ -849,44 +891,54 @@ export function GitHistoryPanel({
   const [operationLoading, setOperationLoading] = useState<string | null>(null);
   const [operationNotice, setOperationNotice] = useState<GitOperationNoticeState | null>(null);
   const operationNoticeTimerRef = useRef<number | null>(null);
-  const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [pushDialogOpen, setPushDialogOpen] = useState(false);
+  const [pushRemote, setPushRemote] = useState("origin");
+  const [pushTargetBranch, setPushTargetBranch] = useState("");
+  const [pushTargetBranchQuery, setPushTargetBranchQuery] = useState("");
+  const [pushTags, setPushTags] = useState(false);
+  const [pushRunHooks, setPushRunHooks] = useState(true);
+  const [pushForceWithLease, setPushForceWithLease] = useState(false);
+  const [pushToGerrit, setPushToGerrit] = useState(false);
+  const [pushTopic, setPushTopic] = useState("");
+  const [pushReviewers, setPushReviewers] = useState("");
+  const [pushCc, setPushCc] = useState("");
+  const [pushRemoteMenuOpen, setPushRemoteMenuOpen] = useState(false);
+  const [pushRemoteMenuPlacement, setPushRemoteMenuPlacement] = useState<"down" | "up">("up");
+  const [pushTargetBranchMenuOpen, setPushTargetBranchMenuOpen] = useState(false);
+  const [pushTargetBranchMenuPlacement, setPushTargetBranchMenuPlacement] = useState<"down" | "up">(
+    "down",
+  );
+  const pushRemotePickerRef = useRef<HTMLDivElement | null>(null);
+  const pushTargetBranchPickerRef = useRef<HTMLDivElement | null>(null);
+  const pushTargetBranchFieldRef = useRef<HTMLLabelElement | null>(null);
+  const [pushPreviewLoading, setPushPreviewLoading] = useState(false);
+  const [pushPreviewError, setPushPreviewError] = useState<string | null>(null);
+  const [pushPreviewTargetFound, setPushPreviewTargetFound] = useState(true);
+  const [pushPreviewHasMore, setPushPreviewHasMore] = useState(false);
+  const [pushPreviewCommits, setPushPreviewCommits] = useState<GitHistoryCommit[]>([]);
+  const [pushPreviewSelectedSha, setPushPreviewSelectedSha] = useState<string | null>(null);
+  const [pushPreviewDetails, setPushPreviewDetails] = useState<GitCommitDetails | null>(null);
+  const [pushPreviewDetailsLoading, setPushPreviewDetailsLoading] = useState(false);
+  const [pushPreviewDetailsError, setPushPreviewDetailsError] = useState<string | null>(null);
+  const [pushPreviewExpandedDirs, setPushPreviewExpandedDirs] = useState<Set<string>>(new Set());
+  const [pushPreviewSelectedFileKey, setPushPreviewSelectedFileKey] = useState<string | null>(null);
+  const [pushPreviewModalFileKey, setPushPreviewModalFileKey] = useState<string | null>(null);
+  const pushPreviewLoadTokenRef = useRef(0);
+  const pushPreviewDetailsLoadTokenRef = useRef(0);
+  const [commitContextMenu, setCommitContextMenu] = useState<CommitContextMenuState | null>(null);
+  const [commitContextMoreOpen, setCommitContextMoreOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetTargetSha, setResetTargetSha] = useState<string | null>(null);
+  const [resetMode, setResetMode] = useState<GitResetMode>("mixed");
   const [createBranchDialogOpen, setCreateBranchDialogOpen] = useState(false);
   const [createBranchSource, setCreateBranchSource] = useState("");
   const [createBranchName, setCreateBranchName] = useState("");
-  const [branchContextMenu, setBranchContextMenu] = useState<BranchContextMenuState | null>(null);
-  const [branchDiffState, setBranchDiffState] = useState<BranchDiffState | null>(null);
-  const branchDiffCacheRef = useRef<Map<string, GitCommitDiff>>(new Map());
-  const branchCompareDetailsCacheRef = useRef<Map<string, GitCommitDetails>>(new Map());
   const [repositoryUnavailable, setRepositoryUnavailable] = useState(false);
   const [fallbackGitRoots, setFallbackGitRoots] = useState<string[]>([]);
   const [fallbackGitRootsLoading, setFallbackGitRootsLoading] = useState(false);
   const [fallbackGitRootsError, setFallbackGitRootsError] = useState<string | null>(null);
   const [fallbackSelectingRoot, setFallbackSelectingRoot] = useState<string | null>(null);
   const [workspaceSelectingId, setWorkspaceSelectingId] = useState<string | null>(null);
-
-  const closeBranchContextMenu = useCallback(() => {
-    setBranchContextMenu(null);
-  }, []);
-
-  const closeBranchDiff = useCallback(() => {
-    setBranchDiffState(null);
-    setComparePreviewFileKey(null);
-  }, []);
-
-  const handleOpenBranchContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>, branch: GitBranchListItem, source: BranchMenuSource) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setSelectedBranch(branch.name);
-      setBranchContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        branch,
-        source,
-      });
-    },
-    [],
-  );
 
   const applyHistorySnapshotId = useCallback((snapshotId: string | null) => {
     historySnapshotIdRef.current = snapshotId;
@@ -1149,6 +1201,10 @@ export function GitHistoryPanel({
   ]);
 
   useEffect(() => {
+    commitFullDiffCacheRef.current.clear();
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (!workspaceId) {
       return;
     }
@@ -1263,14 +1319,11 @@ export function GitHistoryPanel({
 
   const createBranchSourceOptions = useMemo(() => {
     const names = new Set(localBranches.map((entry) => entry.name));
-    for (const entry of remoteBranches) {
-      names.add(entry.name);
-    }
     if (currentBranch) {
       names.add(currentBranch);
     }
     return Array.from(names).sort((left, right) => left.localeCompare(right));
-  }, [currentBranch, localBranches, remoteBranches]);
+  }, [currentBranch, localBranches]);
 
   useEffect(() => {
     if (branchQuery.trim()) {
@@ -1313,52 +1366,20 @@ export function GitHistoryPanel({
     createBranchNameInputRef.current?.focus();
   }, [createBranchDialogOpen]);
 
-  useEffect(() => {
-    setBranchDiffState(null);
-    branchDiffCacheRef.current.clear();
-    branchCompareDetailsCacheRef.current.clear();
-    setComparePreviewFileKey(null);
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (createBranchDialogOpen && branchContextMenu) {
-      closeBranchContextMenu();
-    }
-  }, [branchContextMenu, closeBranchContextMenu, createBranchDialogOpen]);
-
-  useEffect(() => {
-    if (!branchContextMenu) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (!branchContextMenuRef.current?.contains(target)) {
-        closeBranchContextMenu();
-      }
-    };
-    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeBranchContextMenu();
-      }
-    };
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
-  }, [branchContextMenu, closeBranchContextMenu]);
-
   const fileTreeItems = useMemo(() => {
     if (!details) {
       return [];
     }
     return buildFileTreeItems(details.files, expandedDirs);
   }, [details, expandedDirs]);
+
+  const detailsMessageContent = useMemo(() => {
+    if (!details) {
+      return "";
+    }
+    const commitBody = extractCommitBody(details.summary, details.message);
+    return commitBody || t("git.historyCommitMetaNoContent");
+  }, [details, t]);
 
   const previewDetailFile = useMemo(() => {
     if (!details || !previewFileKey) {
@@ -1394,45 +1415,139 @@ export function GitHistoryPanel({
     ];
   }, [previewDetailFile]);
 
-  const comparePreviewDetailFile = useMemo(() => {
-    if (!comparePreviewFileKey || !branchDiffState || branchDiffState.mode !== "branch") {
+  const worktreePreviewDiffText = useMemo(() => {
+    if (!worktreePreviewFile) {
       return null;
     }
-    const selectedCommitDetails = branchDiffState.selectedCommitDetails;
-    if (!selectedCommitDetails) {
-      return null;
-    }
-    return selectedCommitDetails.files.find(
-      (entry) => buildFileKey(entry) === comparePreviewFileKey,
-    ) ?? null;
-  }, [branchDiffState, comparePreviewFileKey]);
-
-  const comparePreviewDetailFileDiff = useMemo(() => {
-    if (!comparePreviewDetailFile) {
-      return null;
-    }
-    if (comparePreviewDetailFile.isBinary) {
+    if (worktreePreviewFile.isBinary) {
       return t("git.historyBinaryDiffUnavailable");
     }
-    const diffText = (comparePreviewDetailFile.diff ?? "").trimEnd();
+    const diffText = (worktreePreviewFile.diff ?? "").trimEnd();
     if (!diffText.trim()) {
       return t("git.historyEmptyDiff");
     }
     return diffText;
-  }, [comparePreviewDetailFile, t]);
+  }, [worktreePreviewFile, t]);
 
-  const comparePreviewDiffEntries = useMemo(() => {
-    if (!comparePreviewDetailFile) {
+  const worktreePreviewDiffEntries = useMemo(() => {
+    if (!worktreePreviewFile) {
       return [];
     }
     return [
       {
-        path: comparePreviewDetailFile.path,
-        status: comparePreviewDetailFile.status,
-        diff: comparePreviewDetailFile.diff ?? "",
+        path: worktreePreviewFile.path,
+        status: worktreePreviewFile.status,
+        diff: worktreePreviewFile.diff ?? "",
+        isImage: worktreePreviewFile.isImage,
+        oldImageData: worktreePreviewFile.oldImageData,
+        newImageData: worktreePreviewFile.newImageData,
+        oldImageMime: worktreePreviewFile.oldImageMime,
+        newImageMime: worktreePreviewFile.newImageMime,
       },
     ];
-  }, [comparePreviewDetailFile]);
+  }, [worktreePreviewFile]);
+
+  const pushPreviewFileTreeItems = useMemo(() => {
+    if (!pushPreviewDetails) {
+      return [];
+    }
+    return buildFileTreeItems(pushPreviewDetails.files, pushPreviewExpandedDirs);
+  }, [pushPreviewDetails, pushPreviewExpandedDirs]);
+
+  const pushPreviewModalFile = useMemo(() => {
+    if (!pushPreviewDetails || !pushPreviewModalFileKey) {
+      return null;
+    }
+    return (
+      pushPreviewDetails.files.find((entry) => buildFileKey(entry) === pushPreviewModalFileKey) ?? null
+    );
+  }, [pushPreviewDetails, pushPreviewModalFileKey]);
+
+  const pushPreviewModalFileDiff = useMemo(() => {
+    if (!pushPreviewModalFile) {
+      return null;
+    }
+    if (pushPreviewModalFile.isBinary) {
+      return t("git.historyBinaryDiffUnavailable");
+    }
+    const diffText = (pushPreviewModalFile.diff ?? "").trimEnd();
+    if (!diffText.trim()) {
+      return t("git.historyEmptyDiff");
+    }
+    return diffText;
+  }, [pushPreviewModalFile, t]);
+
+  const pushPreviewModalDiffEntries = useMemo(() => {
+    if (!pushPreviewModalFile) {
+      return [];
+    }
+    return [
+      {
+        path: pushPreviewModalFile.path,
+        status: pushPreviewModalFile.status,
+        diff: pushPreviewModalFile.diff ?? "",
+      },
+    ];
+  }, [pushPreviewModalFile]);
+
+  const loadCommitFileFullDiff = useCallback(
+    async (commitSha: string, path: string): Promise<string> => {
+      if (!workspaceId) {
+        return "";
+      }
+      const normalizedPath = path.replace(/^(?:a|b)\//, "");
+      const cachePathKey = `full_ctx200k:${normalizedPath}`;
+      const cachedByPath = commitFullDiffCacheRef.current.get(commitSha);
+      if (cachedByPath && cachedByPath.has(cachePathKey)) {
+        return cachedByPath.get(cachePathKey) ?? "";
+      }
+
+      const commitDiffs = await getGitCommitDiff(workspaceId, commitSha, {
+        path: normalizedPath,
+        contextLines: 200_000,
+      });
+      const fullDiff =
+        commitDiffs.find((entry) => entry.path === normalizedPath)?.diff
+        ?? commitDiffs[0]?.diff
+        ?? "";
+
+      const nextCache = cachedByPath ? new Map(cachedByPath) : new Map<string, string>();
+      nextCache.set(cachePathKey, fullDiff);
+      commitFullDiffCacheRef.current.set(commitSha, nextCache);
+      return fullDiff;
+    },
+    [workspaceId],
+  );
+
+  const previewModalFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!selectedCommitSha) {
+        return Promise.resolve("");
+      }
+      return loadCommitFileFullDiff(selectedCommitSha, path);
+    },
+    [loadCommitFileFullDiff, selectedCommitSha],
+  );
+
+  const pushPreviewModalFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!pushPreviewSelectedSha) {
+        return Promise.resolve("");
+      }
+      return loadCommitFileFullDiff(pushPreviewSelectedSha, path);
+    },
+    [loadCommitFileFullDiff, pushPreviewSelectedSha],
+  );
+
+  const worktreePreviewFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!workspaceId) {
+        return Promise.resolve("");
+      }
+      return getGitFileFullDiff(workspaceId, path.replace(/^(?:a|b)\//, ""));
+    },
+    [workspaceId],
+  );
 
   useEffect(() => {
     if (!previewFileKey) {
@@ -1450,31 +1565,144 @@ export function GitHistoryPanel({
   }, [previewFileKey]);
 
   useEffect(() => {
-    if (previewFileKey && !previewDetailFile) {
-      setPreviewFileKey(null);
-    }
-  }, [previewDetailFile, previewFileKey]);
-
-  useEffect(() => {
-    if (!comparePreviewFileKey) {
+    if (!pushPreviewModalFileKey) {
       return;
     }
     const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        setComparePreviewFileKey(null);
+        setPushPreviewModalFileKey(null);
       }
     };
     window.addEventListener("keydown", handleWindowKeyDown);
     return () => {
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
-  }, [comparePreviewFileKey]);
+  }, [pushPreviewModalFileKey]);
 
   useEffect(() => {
-    if (comparePreviewFileKey && !comparePreviewDetailFile) {
-      setComparePreviewFileKey(null);
+    if (!worktreePreviewFile) {
+      return;
     }
-  }, [comparePreviewDetailFile, comparePreviewFileKey]);
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWorktreePreviewFile(null);
+        setWorktreePreviewError(null);
+        setWorktreePreviewLoading(false);
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [worktreePreviewFile]);
+
+  useEffect(() => {
+    if (!commitContextMenu) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest(".git-history-commit-context-menu")) {
+        return;
+      }
+      setCommitContextMenu(null);
+    };
+    const handleScroll = () => setCommitContextMenu(null);
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCommitContextMenu(null);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [commitContextMenu]);
+
+  useEffect(() => {
+    if (!commitContextMenu) {
+      setCommitContextMoreOpen(false);
+    }
+  }, [commitContextMenu]);
+
+  useEffect(() => {
+    if (!pushDialogOpen) {
+      setPushRemoteMenuOpen(false);
+      setPushRemoteMenuPlacement("up");
+      setPushTargetBranchMenuOpen(false);
+      setPushTargetBranchMenuPlacement("down");
+      setPushTargetBranchQuery("");
+      pushPreviewLoadTokenRef.current += 1;
+      pushPreviewDetailsLoadTokenRef.current += 1;
+      setPushPreviewLoading(false);
+      setPushPreviewError(null);
+      setPushPreviewTargetFound(true);
+      setPushPreviewHasMore(false);
+      setPushPreviewCommits([]);
+      setPushPreviewSelectedSha(null);
+      setPushPreviewDetails(null);
+      setPushPreviewDetailsLoading(false);
+      setPushPreviewDetailsError(null);
+      setPushPreviewExpandedDirs(new Set());
+      setPushPreviewSelectedFileKey(null);
+      setPushPreviewModalFileKey(null);
+    }
+  }, [pushDialogOpen]);
+
+  useEffect(() => {
+    if (!pushDialogOpen || (!pushRemoteMenuOpen && !pushTargetBranchMenuOpen)) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (pushRemotePickerRef.current?.contains(target)) {
+        return;
+      }
+      if (pushTargetBranchFieldRef.current?.contains(target)) {
+        return;
+      }
+      setPushRemoteMenuOpen(false);
+      setPushTargetBranchMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [pushDialogOpen, pushRemoteMenuOpen, pushTargetBranchMenuOpen]);
+
+  useEffect(() => {
+    if (previewFileKey && !previewDetailFile) {
+      setPreviewFileKey(null);
+    }
+  }, [previewDetailFile, previewFileKey]);
+
+  useEffect(() => {
+    if (!pushPreviewDetails) {
+      setPushPreviewExpandedDirs(new Set());
+      setPushPreviewSelectedFileKey(null);
+      setPushPreviewModalFileKey(null);
+      return;
+    }
+    setPushPreviewExpandedDirs(collectDirPaths(pushPreviewDetails.files));
+    setPushPreviewSelectedFileKey((previousKey) =>
+      pickSelectedFileKey(previousKey, pushPreviewDetails.files),
+    );
+    // Diff modal should only open when user explicitly clicks a file item.
+    setPushPreviewModalFileKey(null);
+  }, [pushPreviewDetails]);
+
+  useEffect(() => {
+    if (pushPreviewModalFileKey && !pushPreviewModalFile) {
+      setPushPreviewModalFileKey(null);
+    }
+  }, [pushPreviewModalFile, pushPreviewModalFileKey]);
 
   const getOperationDisplayName = useCallback(
     (operationName: string) => {
@@ -1490,8 +1718,7 @@ export function GitHistoryPanel({
         deleteBranch: t("git.historyOperationDeleteBranch"),
         renameBranch: t("git.historyOperationRenameBranch"),
         mergeBranch: t("git.historyOperationMergeBranch"),
-        checkoutRebase: t("git.historyOperationCheckoutAndRebase"),
-        rebaseBranch: t("git.historyOperationRebaseCurrentBranch"),
+        reset: t("git.historyOperationReset"),
         revert: t("git.historyOperationRevertCommit"),
         "cherry-pick": t("git.historyOperationCherryPick"),
       };
@@ -1613,6 +1840,197 @@ export function GitHistoryPanel({
       !createBranchSubmitting &&
       createBranchSource.trim() &&
       createBranchNameTrimmed,
+  );
+  const pushSubmitting = operationLoading === "push";
+  const pushRemoteTrimmed = pushRemote.trim();
+  const pushTargetBranchTrimmed = pushTargetBranch.trim();
+  const pushTargetBranchQueryTrimmed = pushTargetBranchQuery.trim();
+
+  const resolvePushTargetBranchOptions = useCallback(
+    (remoteName: string): string[] => {
+      const normalizedRemote = remoteName.trim();
+      if (!normalizedRemote) {
+        return [];
+      }
+      const branchSet = new Set<string>();
+      const remotePrefix = `${normalizedRemote}/`;
+      for (const branch of remoteBranches) {
+        const fromMeta = branch.remote?.trim();
+        if (fromMeta && fromMeta !== normalizedRemote) {
+          continue;
+        }
+        const normalizedName = branch.name.trim();
+        if (normalizedName.startsWith(remotePrefix)) {
+          const leaf = normalizedName.slice(remotePrefix.length).trim();
+          if (leaf) {
+            branchSet.add(leaf);
+          }
+        }
+      }
+      return Array.from(branchSet).sort((a, b) => a.localeCompare(b));
+    },
+    [remoteBranches],
+  );
+
+  const pushRemoteOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const branch of remoteBranches) {
+      if (branch.remote?.trim()) {
+        set.add(branch.remote.trim());
+      }
+      const slashIndex = branch.name.indexOf("/");
+      if (slashIndex > 0) {
+        set.add(branch.name.slice(0, slashIndex));
+      }
+    }
+    if (!set.size) {
+      set.add("origin");
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [remoteBranches]);
+
+  const pushTargetBranchOptions = useMemo(
+    () => resolvePushTargetBranchOptions(pushRemoteTrimmed || pushRemote),
+    [pushRemote, pushRemoteTrimmed, resolvePushTargetBranchOptions],
+  );
+
+  const filteredPushTargetBranchOptions = useMemo(() => {
+    const keyword = pushTargetBranchQueryTrimmed.toLowerCase();
+    if (!keyword) {
+      return pushTargetBranchOptions;
+    }
+    const matched = pushTargetBranchOptions.filter((branchName) =>
+      branchName.toLowerCase().includes(keyword),
+    );
+    return matched.length > 0 ? matched : pushTargetBranchOptions;
+  }, [pushTargetBranchOptions, pushTargetBranchQueryTrimmed]);
+
+  const pushTargetBranchGroups = useMemo<PushTargetBranchGroup[]>(() => {
+    const grouped = new Map<string, string[]>();
+    for (const branchName of filteredPushTargetBranchOptions) {
+      const scope = getBranchScope(branchName);
+      const bucket = grouped.get(scope) ?? [];
+      bucket.push(branchName);
+      grouped.set(scope, bucket);
+    }
+    const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
+      if (a === "__root__") {
+        return -1;
+      }
+      if (b === "__root__") {
+        return 1;
+      }
+      return a.localeCompare(b);
+    });
+    return sortedScopes.map((scope) => ({
+      scope,
+      label: scope === "__root__" ? t("git.historyPushDialogGroupRoot") : scope,
+      items: (grouped.get(scope) ?? []).sort((a, b) => a.localeCompare(b)),
+    }));
+  }, [filteredPushTargetBranchOptions, t]);
+
+  const updatePushTargetBranchMenuPlacement = useCallback(() => {
+    if (typeof window === "undefined") {
+      setPushTargetBranchMenuPlacement("down");
+      return;
+    }
+    const anchorElement = pushTargetBranchPickerRef.current;
+    if (!anchorElement) {
+      setPushTargetBranchMenuPlacement("down");
+      return;
+    }
+    const anchorRect = anchorElement.getBoundingClientRect();
+    const spaceAbove = anchorRect.top - PUSH_TARGET_MENU_VIEWPORT_PADDING;
+    const spaceBelow = window.innerHeight - anchorRect.bottom - PUSH_TARGET_MENU_VIEWPORT_PADDING;
+    const estimatedRowCount = pushTargetBranchGroups.reduce(
+      (total, group) => total + group.items.length + 1,
+      0,
+    );
+    const estimatedMenuHeight = Math.max(
+      PUSH_TARGET_MENU_MIN_HEIGHT,
+      Math.min(
+        PUSH_TARGET_MENU_MAX_HEIGHT,
+        estimatedRowCount * PUSH_TARGET_MENU_ESTIMATED_ROW_HEIGHT + 28,
+      ),
+    );
+    const shouldOpenUpward =
+      spaceBelow < estimatedMenuHeight &&
+      spaceAbove > spaceBelow &&
+      spaceAbove > PUSH_TARGET_MENU_MIN_HEIGHT;
+    setPushTargetBranchMenuPlacement(shouldOpenUpward ? "up" : "down");
+  }, [pushTargetBranchGroups]);
+
+  const updatePushRemoteMenuPlacement = useCallback(() => {
+    setPushRemoteMenuPlacement("up");
+  }, []);
+
+  const openPushTargetBranchMenu = useCallback(
+    (resetQuery: boolean) => {
+      if (pushSubmitting) {
+        return;
+      }
+      setPushRemoteMenuOpen(false);
+      if (resetQuery) {
+        setPushTargetBranchQuery("");
+      }
+      updatePushTargetBranchMenuPlacement();
+      setPushTargetBranchMenuOpen(true);
+    },
+    [pushSubmitting, updatePushTargetBranchMenuPlacement],
+  );
+
+  useEffect(() => {
+    if (!pushDialogOpen || !pushTargetBranchMenuOpen) {
+      return;
+    }
+    const handleLayoutChange = () => updatePushTargetBranchMenuPlacement();
+    handleLayoutChange();
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
+    return () => {
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
+    };
+  }, [pushDialogOpen, pushTargetBranchMenuOpen, updatePushTargetBranchMenuPlacement]);
+
+  useEffect(() => {
+    if (!pushDialogOpen || !pushRemoteMenuOpen) {
+      return;
+    }
+    const handleLayoutChange = () => updatePushRemoteMenuPlacement();
+    handleLayoutChange();
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
+    return () => {
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
+    };
+  }, [pushDialogOpen, pushRemoteMenuOpen, updatePushRemoteMenuPlacement]);
+
+  const pushHasOutgoingCommits = pushPreviewCommits.length > 0;
+  const pushIsNewBranchTarget = Boolean(
+    pushDialogOpen && !pushPreviewLoading && !pushPreviewError && !pushPreviewTargetFound,
+  );
+  const pushTargetSummaryBranch = useMemo(() => {
+    const targetBranch = pushTargetBranchTrimmed || currentBranch || "main";
+    if (pushToGerrit) {
+      return `refs/for/${targetBranch}`;
+    }
+    return targetBranch;
+  }, [currentBranch, pushTargetBranchTrimmed, pushToGerrit]);
+  const pushPreviewSelectedCommit = useMemo(
+    () => pushPreviewCommits.find((entry) => entry.sha === pushPreviewSelectedSha) ?? null,
+    [pushPreviewCommits, pushPreviewSelectedSha],
+  );
+
+  const pushCanConfirm = Boolean(
+    workspaceId &&
+      !pushSubmitting &&
+      pushRemoteTrimmed &&
+      pushTargetBranchTrimmed &&
+      !pushPreviewLoading &&
+      !pushPreviewError &&
+      pushHasOutgoingCommits,
   );
 
   const workingTreeSummaryLabel =
@@ -1837,27 +2255,18 @@ export function GitHistoryPanel({
     [runOperation, workspaceId],
   );
 
-  const handleCreateBranch = useCallback((sourceBranch?: string | null) => {
+  const handleCreateBranch = useCallback(() => {
     if (!workspaceId || operationLoading) {
       return;
     }
-    const source = sourceBranch?.trim() ?? "";
-    const defaultSource = source
-      || (currentBranch && createBranchSourceOptions.includes(currentBranch) ? currentBranch : null)
-      || createBranchSourceOptions[0]
-      || "";
+    const defaultSource =
+      (currentBranch && createBranchSourceOptions.includes(currentBranch) ? currentBranch : null) ??
+      createBranchSourceOptions[0] ??
+      "";
     setCreateBranchSource(defaultSource);
     setCreateBranchName(t("git.historyPromptNewBranchDefault"));
-    closeBranchContextMenu();
     setCreateBranchDialogOpen(true);
-  }, [
-    closeBranchContextMenu,
-    createBranchSourceOptions,
-    currentBranch,
-    operationLoading,
-    t,
-    workspaceId,
-  ]);
+  }, [createBranchSourceOptions, currentBranch, operationLoading, t, workspaceId]);
 
   const handleCreateBranchConfirm = useCallback(async () => {
     if (!workspaceId) {
@@ -1877,90 +2286,277 @@ export function GitHistoryPanel({
     });
   }, [createBranchName, createBranchSource, operationLoading, runOperation, workspaceId]);
 
-  const handleCreateBranchFromCommit = useCallback(async () => {
-    if (!workspaceId || !selectedCommitSha) {
+  const handleSelectPushRemote = useCallback(
+    (remoteName: string) => {
+      const normalizedRemote = remoteName.trim();
+      if (!normalizedRemote) {
+        return;
+      }
+      setPushRemote(normalizedRemote);
+      setPushRemoteMenuOpen(false);
+      setPushTargetBranchMenuOpen(false);
+      setPushTargetBranchQuery("");
+      const targetOptions = resolvePushTargetBranchOptions(normalizedRemote);
+      setPushTargetBranch((previousValue) => {
+        const normalizedPrevious = previousValue.trim();
+        if (normalizedPrevious && (targetOptions.includes(normalizedPrevious) || !targetOptions.length)) {
+          return normalizedPrevious;
+        }
+        if (currentBranch && targetOptions.includes(currentBranch)) {
+          return currentBranch;
+        }
+        return targetOptions[0] ?? normalizedPrevious;
+      });
+    },
+    [currentBranch, resolvePushTargetBranchOptions],
+  );
+
+  const handleSelectPushTargetBranch = useCallback((branchName: string) => {
+    setPushTargetBranch(branchName);
+    setPushTargetBranchQuery("");
+    setPushTargetBranchMenuOpen(false);
+  }, []);
+
+  const handleOpenPushDialog = useCallback(() => {
+    if (operationLoading) {
       return;
     }
-    const suggested = `feature/commit-${selectedCommitSha.slice(0, 7)}`;
+    const defaultRemote = pushRemoteOptions.includes("origin")
+      ? "origin"
+      : pushRemoteOptions[0] ?? "origin";
+    const defaultTargetOptions = resolvePushTargetBranchOptions(defaultRemote);
+    const defaultTargetBranch =
+      (currentBranch && defaultTargetOptions.includes(currentBranch) ? currentBranch : null) ??
+      defaultTargetOptions[0] ??
+      currentBranch ??
+      "";
+    setPushRemote(defaultRemote);
+    setPushTargetBranch(defaultTargetBranch);
+    setPushTargetBranchQuery("");
+    setPushTags(false);
+    setPushRunHooks(true);
+    setPushForceWithLease(false);
+    setPushToGerrit(false);
+    setPushTopic("");
+    setPushReviewers("");
+    setPushCc("");
+    setPushRemoteMenuOpen(false);
+    setPushTargetBranchMenuOpen(false);
+    setPushTargetBranchMenuPlacement("down");
+    setPushDialogOpen(true);
+  }, [currentBranch, operationLoading, pushRemoteOptions, resolvePushTargetBranchOptions]);
+
+  const loadPushPreview = useCallback(
+    async (remoteName: string, targetBranchName: string) => {
+      if (!workspaceId) {
+        return;
+      }
+      const requestToken = pushPreviewLoadTokenRef.current + 1;
+      pushPreviewLoadTokenRef.current = requestToken;
+      setPushPreviewLoading(true);
+      setPushPreviewError(null);
+      try {
+        const response = await getGitPushPreview(workspaceId, {
+          remote: remoteName,
+          branch: targetBranchName,
+          limit: 120,
+        });
+        if (requestToken !== pushPreviewLoadTokenRef.current) {
+          return;
+        }
+        setPushPreviewTargetFound(response.targetFound);
+        setPushPreviewHasMore(response.hasMore);
+        setPushPreviewCommits(response.commits);
+        setPushPreviewSelectedSha((previousSha) => {
+          if (!response.targetFound) {
+            return null;
+          }
+          if (previousSha && response.commits.some((entry) => entry.sha === previousSha)) {
+            return previousSha;
+          }
+          return response.commits[0]?.sha ?? null;
+        });
+        if (!response.targetFound || !response.commits.length) {
+          pushPreviewDetailsLoadTokenRef.current += 1;
+          setPushPreviewDetails(null);
+          setPushPreviewDetailsError(null);
+          setPushPreviewDetailsLoading(false);
+        }
+      } catch (error) {
+        if (requestToken !== pushPreviewLoadTokenRef.current) {
+          return;
+        }
+        pushPreviewDetailsLoadTokenRef.current += 1;
+        setPushPreviewTargetFound(true);
+        setPushPreviewHasMore(false);
+        setPushPreviewCommits([]);
+        setPushPreviewSelectedSha(null);
+        setPushPreviewDetails(null);
+        setPushPreviewDetailsLoading(false);
+        setPushPreviewDetailsError(null);
+        setPushPreviewError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (requestToken === pushPreviewLoadTokenRef.current) {
+          setPushPreviewLoading(false);
+        }
+      }
+    },
+    [workspaceId],
+  );
+
+  useEffect(() => {
+    if (!pushDialogOpen) {
+      return;
+    }
+    if (!workspaceId || !pushRemoteTrimmed || !pushTargetBranchTrimmed) {
+      pushPreviewLoadTokenRef.current += 1;
+      pushPreviewDetailsLoadTokenRef.current += 1;
+      setPushPreviewLoading(false);
+      setPushPreviewError(null);
+      setPushPreviewTargetFound(true);
+      setPushPreviewHasMore(false);
+      setPushPreviewCommits([]);
+      setPushPreviewSelectedSha(null);
+      setPushPreviewDetails(null);
+      setPushPreviewDetailsLoading(false);
+      setPushPreviewDetailsError(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPushPreview(pushRemoteTrimmed, pushTargetBranchTrimmed);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [
+    loadPushPreview,
+    pushDialogOpen,
+    pushRemoteTrimmed,
+    pushTargetBranchTrimmed,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (!pushDialogOpen || !workspaceId || !pushPreviewSelectedSha) {
+      pushPreviewDetailsLoadTokenRef.current += 1;
+      setPushPreviewDetails(null);
+      setPushPreviewDetailsLoading(false);
+      setPushPreviewDetailsError(null);
+      return;
+    }
+    const requestToken = pushPreviewDetailsLoadTokenRef.current + 1;
+    pushPreviewDetailsLoadTokenRef.current = requestToken;
+    setPushPreviewDetailsLoading(true);
+    setPushPreviewDetailsError(null);
+    void getGitCommitDetails(workspaceId, pushPreviewSelectedSha)
+      .then((response) => {
+        if (requestToken !== pushPreviewDetailsLoadTokenRef.current) {
+          return;
+        }
+        setPushPreviewDetails(response);
+      })
+      .catch((error) => {
+        if (requestToken !== pushPreviewDetailsLoadTokenRef.current) {
+          return;
+        }
+        setPushPreviewDetails(null);
+        setPushPreviewDetailsError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (requestToken === pushPreviewDetailsLoadTokenRef.current) {
+          setPushPreviewDetailsLoading(false);
+        }
+      });
+  }, [pushDialogOpen, pushPreviewSelectedSha, workspaceId]);
+
+  const handleConfirmPush = useCallback(async () => {
+    if (!workspaceId || !pushCanConfirm) {
+      return;
+    }
+    setPushRemoteMenuOpen(false);
+    setPushTargetBranchMenuOpen(false);
+    setPushDialogOpen(false);
+    await runOperation("push", () =>
+      pushGit(workspaceId, {
+        remote: pushRemoteTrimmed,
+        branch: pushTargetBranchTrimmed,
+        forceWithLease: pushForceWithLease,
+        pushTags,
+        runHooks: pushRunHooks,
+        pushToGerrit,
+        topic: pushToGerrit ? pushTopic.trim() : null,
+        reviewers: pushToGerrit ? pushReviewers.trim() : null,
+        cc: pushToGerrit ? pushCc.trim() : null,
+      }),
+    );
+  }, [
+    pushCanConfirm,
+    pushCc,
+    pushForceWithLease,
+    pushRemoteTrimmed,
+    pushReviewers,
+    pushRunHooks,
+    pushTags,
+    pushTargetBranchTrimmed,
+    pushToGerrit,
+    pushTopic,
+    runOperation,
+    workspaceId,
+  ]);
+
+  const handleCreateBranchFromCommit = useCallback(async (commitSha?: string | null) => {
+    const targetSha = commitSha ?? selectedCommitSha;
+    if (!workspaceId || !targetSha) {
+      return;
+    }
+    const suggested = `feature/commit-${targetSha.slice(0, 7)}`;
     const name = window.prompt(t("git.historyPromptBranchFromCommitName"), suggested);
     if (!name || !name.trim()) {
       return;
     }
     await runOperation("createFromCommit", async () => {
       const trimmed = name.trim();
-      await createGitBranchFromCommit(workspaceId, trimmed, selectedCommitSha);
+      await createGitBranchFromCommit(workspaceId, trimmed, targetSha);
       setSelectedBranch(trimmed);
     });
   }, [runOperation, selectedCommitSha, t, workspaceId]);
 
-  const handleJumpToCommit = useCallback(async () => {
-    if (!workspaceId || operationLoading) {
+  const handleDeleteBranch = useCallback(async () => {
+    if (!workspaceId || !selectedBranch || selectedBranch === "all") {
       return;
     }
-    const target = window.prompt(t("git.historyPromptJumpToCommit"), "");
-    if (!target || !target.trim()) {
-      return;
-    }
-    const trimmed = target.trim();
-    setHistoryError(null);
-    try {
-      const resolvedSha = await resolveGitCommitRef(workspaceId, trimmed);
-      setSelectedBranch("all");
-      setCommitQuery(resolvedSha);
-      setSelectedCommitSha(resolvedSha);
-      applyHistorySnapshotId(null);
-      return;
-    } catch {
-      setSelectedBranch("all");
-      setCommitQuery(trimmed);
-      setSelectedCommitSha(null);
-      applyHistorySnapshotId(null);
-    }
-  }, [applyHistorySnapshotId, operationLoading, t, workspaceId]);
-
-  const handleDeleteBranch = useCallback(async (targetBranch?: string | null) => {
-    const branchName = targetBranch ?? selectedBranch;
-    if (!workspaceId || !branchName || branchName === "all") {
-      return;
-    }
-    const confirmed = await ask(t("git.historyConfirmDeleteBranch", { branch: branchName }), {
+    const confirmed = await ask(t("git.historyConfirmDeleteBranch", { branch: selectedBranch }), {
       title: t("git.historyTitleDeleteBranch"),
       kind: "warning",
     });
     if (!confirmed) {
       return;
     }
-    closeBranchContextMenu();
     await runOperation("deleteBranch", async () => {
-      await deleteGitBranch(workspaceId, branchName, false);
+      await deleteGitBranch(workspaceId, selectedBranch, false);
       setSelectedBranch(currentBranch ?? "all");
     });
-  }, [closeBranchContextMenu, currentBranch, runOperation, selectedBranch, t, workspaceId]);
+  }, [currentBranch, runOperation, selectedBranch, t, workspaceId]);
 
-  const handleRenameBranch = useCallback(async (targetBranch?: string | null) => {
-    const branchName = targetBranch ?? selectedBranch;
-    if (!workspaceId || !branchName || branchName === "all") {
+  const handleRenameBranch = useCallback(async () => {
+    if (!workspaceId || !selectedBranch || selectedBranch === "all") {
       return;
     }
-    const next = window.prompt(t("git.historyPromptRenameBranch"), branchName);
-    if (!next || !next.trim() || next.trim() === branchName) {
+    const next = window.prompt(t("git.historyPromptRenameBranch"), selectedBranch);
+    if (!next || !next.trim() || next.trim() === selectedBranch) {
       return;
     }
-    closeBranchContextMenu();
     await runOperation("renameBranch", async () => {
       const trimmed = next.trim();
-      await renameGitBranch(workspaceId, branchName, trimmed);
+      await renameGitBranch(workspaceId, selectedBranch, trimmed);
       setSelectedBranch(trimmed);
     });
-  }, [closeBranchContextMenu, runOperation, selectedBranch, t, workspaceId]);
+  }, [runOperation, selectedBranch, t, workspaceId]);
 
-  const handleMergeBranch = useCallback(async (targetBranch?: string | null) => {
-    const branchName = targetBranch ?? selectedBranch;
-    if (!workspaceId || !branchName || branchName === "all") {
+  const handleMergeBranch = useCallback(async () => {
+    if (!workspaceId || !selectedBranch || selectedBranch === "all") {
       return;
     }
     const confirmed = await ask(
-      t("git.historyConfirmMergeBranchIntoCurrent", { branch: branchName }),
+      t("git.historyConfirmMergeBranchIntoCurrent", { branch: selectedBranch }),
       {
         title: t("git.historyTitleMergeBranch"),
         kind: "warning",
@@ -1969,661 +2565,18 @@ export function GitHistoryPanel({
     if (!confirmed) {
       return;
     }
-    closeBranchContextMenu();
     await runOperation("mergeBranch", async () => {
-      await mergeGitBranch(workspaceId, branchName);
+      await mergeGitBranch(workspaceId, selectedBranch);
     });
-  }, [closeBranchContextMenu, runOperation, selectedBranch, t, workspaceId]);
+  }, [runOperation, selectedBranch, t, workspaceId]);
 
-  const handleCheckoutAndRebaseCurrent = useCallback(async (targetBranch: string) => {
-    if (!workspaceId) {
-      return;
-    }
-    const current = currentBranch;
-    if (!current || !targetBranch || targetBranch === current) {
+  const handleRevertSelectedCommit = useCallback(async (commitSha?: string | null) => {
+    const targetSha = commitSha ?? selectedCommitSha;
+    if (!workspaceId || !targetSha) {
       return;
     }
     const confirmed = await ask(
-      t("git.historyConfirmCheckoutAndRebaseCurrent", {
-        branch: targetBranch,
-        current,
-      }),
-      {
-        title: t("git.historyTitleCheckoutAndRebaseCurrent"),
-        kind: "warning",
-      },
-    );
-    if (!confirmed) {
-      return;
-    }
-    closeBranchContextMenu();
-    await runOperation("checkoutRebase", async () => {
-      await checkoutGitBranch(workspaceId, targetBranch);
-      await rebaseGitBranch(workspaceId, current);
-      setSelectedBranch(targetBranch);
-    });
-  }, [closeBranchContextMenu, currentBranch, runOperation, t, workspaceId]);
-
-  const handleRebaseCurrentOntoBranch = useCallback(async (targetBranch: string) => {
-    if (!workspaceId) {
-      return;
-    }
-    const current = currentBranch;
-    if (!current || !targetBranch || targetBranch === current) {
-      return;
-    }
-    const confirmed = await ask(
-      t("git.historyConfirmRebaseCurrentOntoBranch", {
-        current,
-        branch: targetBranch,
-      }),
-      {
-        title: t("git.historyTitleRebaseCurrentOntoBranch"),
-        kind: "warning",
-      },
-    );
-    if (!confirmed) {
-      return;
-    }
-    closeBranchContextMenu();
-    await runOperation("rebaseBranch", async () => {
-      await rebaseGitBranch(workspaceId, targetBranch);
-    });
-  }, [closeBranchContextMenu, currentBranch, runOperation, t, workspaceId]);
-
-  const handleShowDiffWithWorktree = useCallback(async (targetBranch: string) => {
-    if (!workspaceId || !targetBranch) {
-      return;
-    }
-    const compareBranch = currentBranch ?? "";
-    closeBranchContextMenu();
-    setBranchDiffState({
-      mode: "worktree",
-      branch: targetBranch,
-      compareBranch,
-      files: [],
-      selectedPath: null,
-      loading: true,
-      error: null,
-      selectedDiff: null,
-      selectedDiffLoading: false,
-      selectedDiffError: null,
-    });
-    try {
-      const diffs = await getGitWorktreeDiffAgainstBranch(workspaceId, targetBranch);
-      setBranchDiffState({
-        mode: "worktree",
-        branch: targetBranch,
-        compareBranch,
-        files: diffs.map((entry) => ({
-          path: entry.path,
-          status: entry.status,
-        })),
-        selectedPath: null,
-        loading: false,
-        error: null,
-        selectedDiff: null,
-        selectedDiffLoading: false,
-        selectedDiffError: null,
-      });
-    } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
-      setBranchDiffState({
-        mode: "worktree",
-        branch: targetBranch,
-        compareBranch,
-        files: [],
-        selectedPath: null,
-        loading: false,
-        error: localizeKnownGitError(raw) ?? raw,
-        selectedDiff: null,
-        selectedDiffLoading: false,
-        selectedDiffError: null,
-      });
-    }
-  }, [closeBranchContextMenu, currentBranch, localizeKnownGitError, workspaceId]);
-
-  const handleCompareWithCurrentBranch = useCallback(async (targetBranch: string) => {
-    if (!workspaceId || !targetBranch) {
-      return;
-    }
-    const compareBranch = currentBranch;
-    if (!compareBranch) {
-      return;
-    }
-    closeBranchContextMenu();
-    setComparePreviewFileKey(null);
-    setBranchDiffState({
-      mode: "branch",
-      branch: targetBranch,
-      compareBranch,
-      targetOnlyCommits: [],
-      currentOnlyCommits: [],
-      loading: true,
-      error: null,
-      selectedDirection: null,
-      selectedCommitSha: null,
-      selectedCommitDetails: null,
-      selectedCommitLoading: false,
-      selectedCommitError: null,
-    });
-    try {
-      const commitSets = await getGitBranchCompareCommits(
-        workspaceId,
-        targetBranch,
-        compareBranch,
-      );
-      setBranchDiffState({
-        mode: "branch",
-        branch: targetBranch,
-        compareBranch,
-        targetOnlyCommits: commitSets.targetOnlyCommits,
-        currentOnlyCommits: commitSets.currentOnlyCommits,
-        loading: false,
-        error: null,
-        selectedDirection: null,
-        selectedCommitSha: null,
-        selectedCommitDetails: null,
-        selectedCommitLoading: false,
-        selectedCommitError: null,
-      });
-    } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
-      setBranchDiffState({
-        mode: "branch",
-        branch: targetBranch,
-        compareBranch,
-        targetOnlyCommits: [],
-        currentOnlyCommits: [],
-        loading: false,
-        error: localizeKnownGitError(raw) ?? raw,
-        selectedDirection: null,
-        selectedCommitSha: null,
-        selectedCommitDetails: null,
-        selectedCommitLoading: false,
-        selectedCommitError: null,
-      });
-    }
-  }, [closeBranchContextMenu, currentBranch, localizeKnownGitError, workspaceId]);
-
-  const handleSelectWorktreeDiffFile = useCallback(
-    async (branch: string, compareBranch: string, file: Pick<GitCommitDiff, "path" | "status">) => {
-      if (!workspaceId) {
-        return;
-      }
-      const cacheKey = `${workspaceId}\u0000worktree\u0000${branch}\u0000${compareBranch}\u0000${file.path}`;
-      const cached = branchDiffCacheRef.current.get(cacheKey) ?? null;
-      setBranchDiffState((previous) => {
-        if (
-          !previous
-          || previous.mode !== "worktree"
-          || previous.branch !== branch
-          || previous.compareBranch !== compareBranch
-        ) {
-          return previous;
-        }
-        return {
-          ...previous,
-          selectedPath: file.path,
-          selectedDiff: cached,
-          selectedDiffLoading: !cached,
-          selectedDiffError: null,
-        };
-      });
-      if (cached) {
-        return;
-      }
-      try {
-        const detail = await getGitWorktreeDiffFileAgainstBranch(workspaceId, branch, file.path);
-        const resolvedDetail: GitCommitDiff = {
-          ...detail,
-          path: file.path,
-          status: detail.status || file.status,
-        };
-        branchDiffCacheRef.current.set(cacheKey, resolvedDetail);
-        setBranchDiffState((previous) => {
-          if (
-            !previous
-            || previous.mode !== "worktree"
-            || previous.branch !== branch
-            || previous.compareBranch !== compareBranch
-            || previous.selectedPath !== file.path
-          ) {
-            return previous;
-          }
-          return {
-            ...previous,
-            selectedDiff: resolvedDetail,
-            selectedDiffLoading: false,
-            selectedDiffError: null,
-          };
-        });
-      } catch (error) {
-        const raw = error instanceof Error ? error.message : String(error);
-        setBranchDiffState((previous) => {
-          if (
-            !previous
-            || previous.mode !== "worktree"
-            || previous.branch !== branch
-            || previous.compareBranch !== compareBranch
-            || previous.selectedPath !== file.path
-          ) {
-            return previous;
-          }
-          return {
-            ...previous,
-            selectedDiff: null,
-            selectedDiffLoading: false,
-            selectedDiffError: localizeKnownGitError(raw) ?? raw,
-          };
-        });
-      }
-    },
-    [localizeKnownGitError, workspaceId],
-  );
-
-  const handleSelectBranchCompareCommit = useCallback(
-    async (
-      branch: string,
-      compareBranch: string,
-      direction: BranchCompareDirection,
-      commit: GitHistoryCommit,
-    ) => {
-      if (!workspaceId) {
-        return;
-      }
-      setComparePreviewFileKey(null);
-      const cacheKey = `${workspaceId}\u0000${commit.sha}`;
-      const cached = branchCompareDetailsCacheRef.current.get(cacheKey) ?? null;
-      setBranchDiffState((previous) => {
-        if (
-          !previous
-          || previous.mode !== "branch"
-          || previous.branch !== branch
-          || previous.compareBranch !== compareBranch
-        ) {
-          return previous;
-        }
-        return {
-          ...previous,
-          selectedDirection: direction,
-          selectedCommitSha: commit.sha,
-          selectedCommitDetails: cached,
-          selectedCommitLoading: !cached,
-          selectedCommitError: null,
-        };
-      });
-      if (cached) {
-        return;
-      }
-      try {
-        const details = await getGitCommitDetails(workspaceId, commit.sha);
-        branchCompareDetailsCacheRef.current.set(cacheKey, details);
-        setBranchDiffState((previous) => {
-          if (
-            !previous
-            || previous.mode !== "branch"
-            || previous.branch !== branch
-            || previous.compareBranch !== compareBranch
-            || previous.selectedCommitSha !== commit.sha
-            || previous.selectedDirection !== direction
-          ) {
-            return previous;
-          }
-          return {
-            ...previous,
-            selectedCommitDetails: details,
-            selectedCommitLoading: false,
-            selectedCommitError: null,
-          };
-        });
-      } catch (error) {
-        const raw = error instanceof Error ? error.message : String(error);
-        setBranchDiffState((previous) => {
-          if (
-            !previous
-            || previous.mode !== "branch"
-            || previous.branch !== branch
-            || previous.compareBranch !== compareBranch
-            || previous.selectedCommitSha !== commit.sha
-            || previous.selectedDirection !== direction
-          ) {
-            return previous;
-          }
-          return {
-            ...previous,
-            selectedCommitDetails: null,
-            selectedCommitLoading: false,
-            selectedCommitError: localizeKnownGitError(raw) ?? raw,
-          };
-        });
-      }
-    },
-    [localizeKnownGitError, workspaceId],
-  );
-
-  const branchContextTrackingSummary = useMemo(() => {
-    if (!branchContextMenu) {
-      return null;
-    }
-    const branchName = branchContextMenu.branch.name;
-    const isRemote = branchContextMenu.source === "remote" || branchContextMenu.branch.isRemote;
-    if (isRemote) {
-      return `${branchName} -> ${branchName}`;
-    }
-    const upstreamName = branchContextMenu.branch.upstream?.trim();
-    const trackingTarget = upstreamName && upstreamName.length > 0
-      ? upstreamName
-      : `(${t("git.historyBranchMenuNoUpstreamTracking")})`;
-    return `${branchName} -> ${trackingTarget}`;
-  }, [branchContextMenu, t]);
-
-  const branchContextActions = useMemo<BranchContextAction[]>(() => {
-    if (!workspaceId || !branchContextMenu) {
-      return [];
-    }
-    const targetBranch = branchContextMenu.branch.name;
-    const isCurrent = branchContextMenu.branch.isCurrent || currentBranch === targetBranch;
-    const isRemote = branchContextMenu.source === "remote" || branchContextMenu.branch.isRemote;
-    const baseDisabledReason = operationLoading ? t("git.historyBranchMenuUnavailableBusy") : null;
-    const currentDisabledReason = t("git.historyBranchMenuUnavailableCurrent");
-    const remoteDisabledReason = t("git.historyBranchMenuUnavailableRemote");
-    const noCurrentBranchDisabledReason = t("git.historyBranchMenuUnavailableNoCurrent");
-    const todoDisabledReason = t("git.historyBranchMenuUnavailableNotImplemented");
-    const currentBranchName = currentBranch ?? t("git.unknown");
-    const remoteName = branchContextMenu.branch.remote ?? null;
-
-    const createDisabledReason = createBranchSourceOptions.length === 0
-      ? baseDisabledReason
-      : null;
-
-    return [
-      {
-        id: "checkout",
-        label: t("git.historyBranchMenuCheckout"),
-        icon: <GitBranch size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason || isCurrent),
-        disabledReason: baseDisabledReason || (isCurrent ? currentDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleCheckoutBranch(targetBranch);
-        },
-      },
-      {
-        id: "create-branch",
-        label: t("git.historyBranchMenuCreateFromBranch", { branch: targetBranch }),
-        icon: <Plus size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason || createDisabledReason),
-        disabledReason: baseDisabledReason || createDisabledReason,
-        onSelect: () => {
-          closeBranchContextMenu();
-          handleCreateBranch(targetBranch);
-        },
-      },
-      {
-        id: "checkout-rebase",
-        label: t("git.historyBranchMenuCheckoutAndRebaseCurrent", { current: currentBranchName }),
-        icon: <Repeat size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote || !currentBranch),
-        disabledReason:
-          baseDisabledReason ||
-          (isCurrent
-            ? currentDisabledReason
-            : isRemote
-              ? remoteDisabledReason
-              : !currentBranch
-                ? noCurrentBranchDisabledReason
-                : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleCheckoutAndRebaseCurrent(targetBranch);
-        },
-      },
-      {
-        id: "compare-current",
-        label: t("git.historyBranchMenuCompareWithCurrent", { current: currentBranchName }),
-        icon: <FileText size={14} aria-hidden />,
-        dividerBefore: true,
-        disabled: Boolean(baseDisabledReason || isCurrent),
-        disabledReason: baseDisabledReason || (isCurrent ? currentDisabledReason : null),
-        onSelect: () => {
-          void handleCompareWithCurrentBranch(targetBranch);
-        },
-      },
-      {
-        id: "diff-worktree",
-        label: t("git.historyBranchMenuShowDiffWithWorktree"),
-        icon: <FolderTree size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason),
-        disabledReason: baseDisabledReason,
-        onSelect: () => {
-          void handleShowDiffWithWorktree(targetBranch);
-        },
-      },
-      {
-        id: "rebase-current-onto",
-        label: t("git.historyBranchMenuRebaseCurrentOnto", {
-          current: currentBranchName,
-          branch: targetBranch,
-        }),
-        icon: <RefreshCw size={14} aria-hidden />,
-        dividerBefore: true,
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote || !currentBranch),
-        disabledReason:
-          baseDisabledReason ||
-          (isCurrent
-            ? currentDisabledReason
-            : isRemote
-              ? remoteDisabledReason
-              : !currentBranch
-                ? noCurrentBranchDisabledReason
-                : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleRebaseCurrentOntoBranch(targetBranch);
-        },
-      },
-      {
-        id: "merge-into-current",
-        label: t("git.historyBranchMenuMergeIntoCurrent", {
-          branch: targetBranch,
-          current: currentBranchName,
-        }),
-        icon: <GitMerge size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote),
-        disabledReason: baseDisabledReason || (isCurrent ? currentDisabledReason : isRemote ? remoteDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleMergeBranch(targetBranch);
-        },
-      },
-      {
-        id: "update",
-        label: t("git.historyBranchMenuUpdate"),
-        icon: <Download size={14} aria-hidden />,
-        dividerBefore: true,
-        disabled: Boolean(
-          baseDisabledReason ||
-          (isRemote ? !remoteName : !isCurrent),
-        ),
-        disabledReason:
-          baseDisabledReason ||
-          (isRemote ? (!remoteName ? remoteDisabledReason : null) : !isCurrent ? currentDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          if (isRemote && remoteName) {
-            void runOperation("fetch", () => fetchGit(workspaceId, remoteName));
-            return;
-          }
-          void runOperation("pull", () => pullGit(workspaceId));
-        },
-      },
-      {
-        id: "push",
-        label: t("git.historyBranchMenuPush"),
-        icon: <Upload size={14} aria-hidden />,
-        disabled: Boolean(baseDisabledReason || isRemote || !isCurrent),
-        disabledReason: baseDisabledReason || (isRemote ? remoteDisabledReason : !isCurrent ? currentDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void runOperation("push", () => pushGit(workspaceId));
-        },
-      },
-      {
-        id: "rename",
-        label: t("git.historyBranchMenuRename"),
-        icon: <Pencil size={14} aria-hidden />,
-        dividerBefore: true,
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote || DISABLE_HISTORY_BRANCH_RENAME),
-        disabledReason:
-          baseDisabledReason
-          || (isCurrent ? currentDisabledReason : isRemote ? remoteDisabledReason : DISABLE_HISTORY_BRANCH_RENAME ? todoDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleRenameBranch(targetBranch);
-        },
-      },
-      {
-        id: "delete",
-        label: t("git.historyBranchMenuDelete"),
-        icon: <Trash2 size={14} aria-hidden />,
-        tone: "danger",
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote),
-        disabledReason: baseDisabledReason || (isCurrent ? currentDisabledReason : isRemote ? remoteDisabledReason : null),
-        onSelect: () => {
-          closeBranchContextMenu();
-          void handleDeleteBranch(targetBranch);
-        },
-      },
-    ];
-  }, [
-    branchContextMenu,
-    closeBranchContextMenu,
-    createBranchSourceOptions.length,
-    currentBranch,
-    handleCompareWithCurrentBranch,
-    handleCheckoutAndRebaseCurrent,
-    handleCheckoutBranch,
-    handleCreateBranch,
-    handleDeleteBranch,
-    handleMergeBranch,
-    handleRebaseCurrentOntoBranch,
-    handleRenameBranch,
-    handleShowDiffWithWorktree,
-    operationLoading,
-    runOperation,
-    t,
-    workspaceId,
-  ]);
-
-  const handleBranchContextMenuKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      const menuElement = branchContextMenuRef.current;
-      if (!menuElement) {
-        return;
-      }
-      const enabledItems = Array.from(
-        menuElement.querySelectorAll<HTMLButtonElement>(
-          '.git-history-branch-context-item[role="menuitem"]:not(:disabled)',
-        ),
-      );
-      if (!enabledItems.length) {
-        return;
-      }
-      const activeElement = document.activeElement;
-      const currentIndex = enabledItems.findIndex((item) => item === activeElement);
-      const focusIndex = (index: number) => {
-        const normalized = ((index % enabledItems.length) + enabledItems.length) % enabledItems.length;
-        enabledItems[normalized]?.focus();
-      };
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        event.stopPropagation();
-        focusIndex(currentIndex < 0 ? 0 : currentIndex + 1);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        event.stopPropagation();
-        focusIndex(currentIndex < 0 ? enabledItems.length - 1 : currentIndex - 1);
-        return;
-      }
-      if (event.key === "Home") {
-        event.preventDefault();
-        event.stopPropagation();
-        focusIndex(0);
-        return;
-      }
-      if (event.key === "End") {
-        event.preventDefault();
-        event.stopPropagation();
-        focusIndex(enabledItems.length - 1);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!branchContextMenu) {
-      return;
-    }
-    const rafId = window.requestAnimationFrame(() => {
-      const menuElement = branchContextMenuRef.current;
-      if (!menuElement) {
-        return;
-      }
-      const firstEnabled = menuElement.querySelector<HTMLButtonElement>(
-        '.git-history-branch-context-item[role="menuitem"]:not(:disabled)',
-      );
-      firstEnabled?.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [branchContextActions, branchContextMenu]);
-
-  const branchContextMenuStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!branchContextMenu) {
-      return undefined;
-    }
-    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1440;
-    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
-    const longestLabelLength = branchContextActions.reduce(
-      (max, action) => Math.max(max, action.label.length),
-      0,
-    );
-    const estimatedMenuWidth = clamp(longestLabelLength * 8 + 96, 276, 520);
-    const dividerCount = branchContextActions.reduce(
-      (count, action) => count + (action.dividerBefore ? 1 : 0),
-      0,
-    );
-    const estimatedMenuHeight = clamp(
-      branchContextActions.length * 38 + dividerCount * 8 + 18,
-      220,
-      560,
-    );
-    const padding = 10;
-    return {
-      left: clamp(
-        branchContextMenu.x,
-        padding,
-        Math.max(padding, viewportWidth - estimatedMenuWidth - padding),
-      ),
-      top: clamp(
-        branchContextMenu.y,
-        padding,
-        Math.max(padding, viewportHeight - estimatedMenuHeight - padding),
-      ),
-    };
-  }, [branchContextActions, branchContextMenu]);
-
-  const handleRevertSelectedCommit = useCallback(async () => {
-    if (!workspaceId || !selectedCommitSha) {
-      return;
-    }
-    const confirmed = await ask(
-      t("git.historyConfirmRevertCommit", { sha: selectedCommitSha.slice(0, 10) }),
+      t("git.historyConfirmRevertCommit", { sha: targetSha.slice(0, 10) }),
       {
         title: t("git.historyTitleRevertCommit"),
         kind: "warning",
@@ -2632,8 +2585,111 @@ export function GitHistoryPanel({
     if (!confirmed) {
       return;
     }
-    await runOperation("revert", () => revertCommit(workspaceId, selectedCommitSha));
+    await runOperation("revert", () => revertCommit(workspaceId, targetSha));
   }, [runOperation, selectedCommitSha, t, workspaceId]);
+
+  const handleCherryPickCommit = useCallback(async (commitSha?: string | null) => {
+    const targetSha = commitSha ?? selectedCommitSha;
+    if (!workspaceId || !targetSha) {
+      return;
+    }
+    await runOperation("cherry-pick", () => cherryPickCommit(workspaceId, targetSha));
+  }, [runOperation, selectedCommitSha, workspaceId]);
+
+  const handleCopyCommitRevision = useCallback(
+    async (commitSha?: string | null) => {
+      const targetSha = commitSha ?? selectedCommitSha;
+      if (!targetSha) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(targetSha);
+        showOperationNotice({
+          kind: "success",
+          message: t("git.historyOperationSucceeded", {
+            operation: t("git.historyCopyRevisionNumber"),
+          }),
+        });
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        showOperationNotice({
+          kind: "error",
+          message: `${t("git.historyOperationFailed", {
+            operation: t("git.historyCopyRevisionNumber"),
+          })} ${rawMessage}`,
+          debugMessage: rawMessage,
+        });
+      }
+    },
+    [selectedCommitSha, showOperationNotice, t],
+  );
+
+  const handleCopyCommitMessage = useCallback(
+    async (commitSha?: string | null) => {
+      const targetSha = commitSha ?? selectedCommitSha;
+      if (!targetSha) {
+        return;
+      }
+      const targetCommit = commits.find((entry) => entry.sha === targetSha);
+      const targetMessage =
+        targetCommit?.message
+        || (details?.sha === targetSha ? details.message : "")
+        || targetCommit?.summary
+        || "";
+      if (!targetMessage.trim()) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(targetMessage);
+        showOperationNotice({
+          kind: "success",
+          message: t("git.historyOperationSucceeded", {
+            operation: t("git.historyCopyCommitMessage"),
+          }),
+        });
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        showOperationNotice({
+          kind: "error",
+          message: `${t("git.historyOperationFailed", {
+            operation: t("git.historyCopyCommitMessage"),
+          })} ${rawMessage}`,
+          debugMessage: rawMessage,
+        });
+      }
+    },
+    [commits, details, selectedCommitSha, showOperationNotice, t],
+  );
+
+  const openResetDialog = useCallback((commitSha?: string | null) => {
+    const targetSha = commitSha ?? selectedCommitSha;
+    if (!targetSha) {
+      return;
+    }
+    setResetTargetSha(targetSha);
+    setResetMode("mixed");
+    setResetDialogOpen(true);
+  }, [selectedCommitSha]);
+
+  const handleConfirmResetCommit = useCallback(async () => {
+    if (!workspaceId || !resetTargetSha) {
+      return;
+    }
+    if (resetMode === "hard") {
+      const confirmed = await ask(
+        t("git.historyConfirmHardReset", { sha: resetTargetSha.slice(0, 10) }),
+        {
+          title: t("git.historyTitleHardReset"),
+          kind: "warning",
+        },
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    setResetDialogOpen(false);
+    await runOperation("reset", () => resetGitCommit(workspaceId, resetTargetSha, resetMode));
+  }, [resetMode, resetTargetSha, runOperation, t, workspaceId]);
 
   const handleFileTreeDirToggle = useCallback((path: string) => {
     setExpandedDirs((prev) => {
@@ -2646,6 +2702,247 @@ export function GitHistoryPanel({
       return next;
     });
   }, []);
+
+  const handlePushPreviewDirToggle = useCallback((path: string) => {
+    setPushPreviewExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const closeWorktreePreview = useCallback(() => {
+    setWorktreePreviewFile(null);
+    setWorktreePreviewError(null);
+    setWorktreePreviewLoading(false);
+  }, []);
+
+  const handleOpenWorktreePreview = useCallback(
+    async (path: string) => {
+      if (!workspaceId) {
+        onOpenDiffPath?.(path);
+        return;
+      }
+      setWorktreePreviewError(null);
+      setWorktreePreviewLoading(true);
+      setWorktreePreviewFile((current) =>
+        current && current.path === path
+          ? current
+          : {
+              path,
+              status: "M",
+              additions: 0,
+              deletions: 0,
+              diff: "",
+            },
+      );
+      try {
+        const [statusResponse, diffEntries] = await Promise.all([
+          getGitStatus(workspaceId),
+          getGitDiffs(workspaceId),
+        ]);
+        const statusFile =
+          statusResponse.files.find((entry) => entry.path === path)
+          ?? statusResponse.unstagedFiles.find((entry) => entry.path === path)
+          ?? statusResponse.stagedFiles.find((entry) => entry.path === path);
+        const diffEntry = diffEntries.find((entry) => entry.path === path);
+        setWorktreePreviewFile({
+          path,
+          status: statusFile?.status ?? "M",
+          additions: statusFile?.additions ?? 0,
+          deletions: statusFile?.deletions ?? 0,
+          diff: diffEntry?.diff ?? "",
+          isBinary: diffEntry?.isBinary,
+          isImage: diffEntry?.isImage,
+          oldImageData: diffEntry?.oldImageData ?? null,
+          newImageData: diffEntry?.newImageData ?? null,
+          oldImageMime: diffEntry?.oldImageMime ?? null,
+          newImageMime: diffEntry?.newImageMime ?? null,
+        });
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        setWorktreePreviewError(rawMessage);
+        onOpenDiffPath?.(path);
+      } finally {
+        setWorktreePreviewLoading(false);
+      }
+    },
+    [onOpenDiffPath, workspaceId],
+  );
+
+  const resetTargetCommit = useMemo(() => {
+    if (!resetTargetSha) {
+      return null;
+    }
+    if (details?.sha === resetTargetSha) {
+      return {
+        sha: resetTargetSha,
+        summary: details.summary || t("git.historyNoMessage"),
+        author: details.author || t("git.unknown"),
+      };
+    }
+    const entry = commits.find((item) => item.sha === resetTargetSha);
+    if (!entry) {
+      return null;
+    }
+    return {
+      sha: resetTargetSha,
+      summary: entry.summary || t("git.historyNoMessage"),
+      author: entry.author || t("git.unknown"),
+    };
+  }, [commits, details?.author, details?.sha, details?.summary, resetTargetSha, t]);
+
+  const buildCommitActions = useCallback(
+    (targetSha: string | null): CommitActionDescriptor[] => {
+      const noCommitReason = t("git.historySelectCommitToViewDetails");
+      const busyReason = t("git.historyOperationBusy");
+      const hasTarget = Boolean(targetSha);
+      const busy = Boolean(operationLoading);
+      return [
+        {
+          id: "copyRevision",
+          label: t("git.historyCopyRevisionNumber"),
+          group: "quick",
+          disabled: !hasTarget,
+          disabledReason: !hasTarget ? noCommitReason : undefined,
+        },
+        {
+          id: "copyMessage",
+          label: t("git.historyCopyCommitMessage"),
+          group: "quick",
+          disabled: !hasTarget,
+          disabledReason: !hasTarget ? noCommitReason : undefined,
+        },
+        {
+          id: "createBranch",
+          label: t("git.historyBranchFromCommit"),
+          group: "branch",
+          disabled: !hasTarget || busy,
+          disabledReason: !hasTarget ? noCommitReason : busy ? busyReason : undefined,
+        },
+        {
+          id: "reset",
+          label: t("git.historyResetCurrentBranchToHere"),
+          group: "branch",
+          disabled: !hasTarget || busy,
+          disabledReason: !hasTarget ? noCommitReason : busy ? busyReason : undefined,
+        },
+        {
+          id: "cherryPick",
+          label: t("git.historyCherryPick"),
+          group: "write",
+          disabled: DISABLE_HISTORY_COMMIT_ACTIONS || !hasTarget || busy,
+          disabledReason: DISABLE_HISTORY_COMMIT_ACTIONS
+            ? busyReason
+            : !hasTarget
+              ? noCommitReason
+              : busy
+                ? busyReason
+                : undefined,
+        },
+        {
+          id: "revert",
+          label: t("git.historyRevert"),
+          group: "write",
+          disabled: DISABLE_HISTORY_COMMIT_ACTIONS || !hasTarget || busy,
+          disabledReason: DISABLE_HISTORY_COMMIT_ACTIONS
+            ? busyReason
+            : !hasTarget
+              ? noCommitReason
+              : busy
+                ? busyReason
+                : undefined,
+        },
+      ];
+    },
+    [operationLoading, t],
+  );
+
+  const contextCommitActions = useMemo(
+    () => buildCommitActions(commitContextMenu?.commitSha ?? null),
+    [buildCommitActions, commitContextMenu?.commitSha],
+  );
+
+  const contextPrimaryActionGroups = useMemo(() => {
+    return (["quick", "branch"] as const)
+      .map((groupKey) => ({
+        groupKey,
+        items: contextCommitActions.filter(
+          (item) => item.group === groupKey && item.id !== "copyMessage",
+        ),
+      }))
+      .filter((entry) => entry.items.length > 0);
+  }, [contextCommitActions]);
+
+  const contextWriteActions = useMemo(
+    () => contextCommitActions.filter((item) => item.group === "write"),
+    [contextCommitActions],
+  );
+
+  const contextMoreDisabledReason = useMemo(() => {
+    if (!contextWriteActions.length) {
+      return undefined;
+    }
+    if (!contextWriteActions.every((action) => action.disabled)) {
+      return undefined;
+    }
+    return contextWriteActions.find((action) => action.disabledReason)?.disabledReason;
+  }, [contextWriteActions]);
+
+  const runCommitAction = useCallback(
+    (actionId: CommitActionId, commitSha: string | null) => {
+      if (!commitSha) {
+        return;
+      }
+      switch (actionId) {
+        case "copyRevision":
+          void handleCopyCommitRevision(commitSha);
+          return;
+        case "copyMessage":
+          void handleCopyCommitMessage(commitSha);
+          return;
+        case "createBranch":
+          void handleCreateBranchFromCommit(commitSha);
+          return;
+        case "reset":
+          openResetDialog(commitSha);
+          return;
+        case "cherryPick":
+          void handleCherryPickCommit(commitSha);
+          return;
+        case "revert":
+          void handleRevertSelectedCommit(commitSha);
+          return;
+      }
+    },
+    [
+      handleCherryPickCommit,
+      handleCopyCommitMessage,
+      handleCopyCommitRevision,
+      handleCreateBranchFromCommit,
+      handleRevertSelectedCommit,
+      openResetDialog,
+    ],
+  );
+
+  const handleOpenCommitContextMenu = useCallback(
+    (event: MouseEvent<HTMLElement>, commitSha: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedCommitSha(commitSha);
+      setCommitContextMoreOpen(false);
+      setCommitContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        commitSha,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -2884,38 +3181,6 @@ export function GitHistoryPanel({
     selectedCommitSha,
   ]);
 
-  const isWorktreeDiffMode = branchDiffState?.mode === "worktree";
-  const branchDiffModeClassName = isWorktreeDiffMode ? "is-worktree-mode" : "is-branch-mode";
-  const branchDiffTitle = branchDiffState
-    ? branchDiffState.mode === "worktree"
-      ? t("git.historyBranchWorktreeDiffTitle", {
-        branch: branchDiffState.branch,
-        currentBranch: branchDiffState.compareBranch || t("git.unknown"),
-      })
-      : t("git.historyBranchCompareDiffTitle", {
-        branch: branchDiffState.branch,
-        compareBranch: branchDiffState.compareBranch || t("git.unknown"),
-      })
-    : "";
-  const branchDiffSubtitle = branchDiffState
-    ? branchDiffState.mode === "worktree"
-      ? t("git.historyBranchWorktreeDiffSubtitle", { branch: branchDiffState.branch })
-      : t("git.historyBranchCompareDiffSubtitle", {
-        branch: branchDiffState.branch,
-        compareBranch: branchDiffState.compareBranch || t("git.unknown"),
-      })
-    : "";
-  const branchDiffModeLabel = isWorktreeDiffMode
-    ? t("git.historyBranchWorktreeDiffModeBadge")
-    : t("git.historyBranchCompareDiffModeBadge");
-  const branchDiffStatsLabel = branchDiffState
-    ? branchDiffState.mode === "worktree"
-      ? t("git.filesChanged", { count: branchDiffState.files.length })
-      : t("git.historyBranchCompareCommitCount", {
-        count: branchDiffState.targetOnlyCommits.length + branchDiffState.currentOnlyCommits.length,
-      })
-    : "";
-
   if (shouldShowWorkspacePickerPage) {
     const canPickFallbackGitRoot = repositoryUnavailable && Boolean(workspace);
     const isEmptyStateSelecting = Boolean(fallbackSelectingRoot || workspaceSelectingId);
@@ -3028,14 +3293,21 @@ export function GitHistoryPanel({
       className="git-history-workbench"
       tabIndex={0}
       onKeyDown={(event) => {
-        if (branchDiffState && event.key === "Escape") {
+        if (pushDialogOpen && event.key === "Escape") {
           event.preventDefault();
-          closeBranchDiff();
+          if (pushRemoteMenuOpen || pushTargetBranchMenuOpen) {
+            setPushRemoteMenuOpen(false);
+            setPushTargetBranchMenuOpen(false);
+            return;
+          }
+          if (!pushSubmitting) {
+            setPushDialogOpen(false);
+          }
           return;
         }
-        if (branchContextMenu && event.key === "Escape") {
+        if (resetDialogOpen && event.key === "Escape") {
           event.preventDefault();
-          closeBranchContextMenu();
+          setResetDialogOpen(false);
           return;
         }
         if (createBranchDialogOpen && event.key === "Escape") {
@@ -3045,7 +3317,7 @@ export function GitHistoryPanel({
           }
           return;
         }
-        if (createBranchDialogOpen || branchContextMenu || branchDiffState) {
+        if (createBranchDialogOpen || resetDialogOpen || pushDialogOpen) {
           return;
         }
         const target = event.target as HTMLElement | null;
@@ -3127,7 +3399,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
-              onActivate={() => void runOperation("push", () => pushGit(workspace.id))}
+              onActivate={handleOpenPushDialog}
               disabled={Boolean(operationLoading)}
               title={t("git.push")}
             >
@@ -3228,7 +3500,9 @@ export function GitHistoryPanel({
             listView={overviewListView}
             onMutated={() => refreshAll()}
             onSummaryChange={handleWorktreeSummaryChange}
-            onOpenDiffPath={onOpenDiffPath}
+            onOpenDiffPath={(path) => {
+              void handleOpenWorktreePreview(path);
+            }}
           />
         </aside>
 
@@ -3336,13 +3610,7 @@ export function GitHistoryPanel({
                         </ActionSurface>
                         {scopeExpanded &&
                           group.items.map((entry) => (
-                            <div
-                              key={`local-${entry.name}`}
-                              className="git-history-branch-row"
-                              onContextMenu={(event) =>
-                                handleOpenBranchContextMenu(event, entry, "local")
-                              }
-                            >
+                            <div key={`local-${entry.name}`} className="git-history-branch-row">
                               <ActionSurface
                                 className={`git-history-branch-item git-history-branch-item-tree ${
                                   entry.isCurrent ? "is-head-branch" : ""
@@ -3366,6 +3634,15 @@ export function GitHistoryPanel({
                                   {entry.ahead > 0 ? <i className="is-ahead">+{entry.ahead}</i> : null}
                                   {entry.behind > 0 ? <i className="is-behind">-{entry.behind}</i> : null}
                                 </span>
+                              </ActionSurface>
+                              <ActionSurface
+                                className="git-history-branch-checkout-icon"
+                                onActivate={() => void handleCheckoutBranch(entry.name)}
+                                disabled={Boolean(operationLoading)}
+                                title={t("git.historyCheckoutBranch", { name: entry.name })}
+                                ariaLabel={t("git.historyCheckoutBranch", { name: entry.name })}
+                              >
+                                <LogIn size={13} />
                               </ActionSurface>
                             </div>
                           ))}
@@ -3403,33 +3680,26 @@ export function GitHistoryPanel({
                         </ActionSurface>
                         {scopeExpanded &&
                           group.items.map((entry) => (
-                            <div
+                            <ActionSurface
                               key={`remote-${entry.name}`}
-                              className="git-history-branch-row git-history-branch-row-remote"
-                              onContextMenu={(event) =>
-                                handleOpenBranchContextMenu(event, entry, "remote")
-                              }
+                              className="git-history-branch-item git-history-branch-item-remote-tree"
+                              active={selectedBranch === entry.name}
+                              onActivate={() => setSelectedBranch(entry.name)}
                             >
-                              <ActionSurface
-                                className="git-history-branch-item git-history-branch-item-remote-tree"
-                                active={selectedBranch === entry.name}
-                                onActivate={() => setSelectedBranch(entry.name)}
-                              >
-                                <span className="git-history-tree-branch-main">
-                                  <GitBranch size={11} />
-                                  <span className="git-history-branch-name">
-                                    {trimRemotePrefix(entry.name, group.remote)}
-                                  </span>
+                              <span className="git-history-tree-branch-main">
+                                <GitBranch size={11} />
+                                <span className="git-history-branch-name">
+                                  {trimRemotePrefix(entry.name, group.remote)}
                                 </span>
-                                <span className="git-history-branch-badges">
-                                  {getSpecialBranchBadges(entry.name, t).map((badge) => (
-                                    <i key={`${entry.name}-${badge}`} className="is-special">
-                                      {badge}
-                                    </i>
-                                  ))}
-                                </span>
-                              </ActionSurface>
-                            </div>
+                              </span>
+                              <span className="git-history-branch-badges">
+                                {getSpecialBranchBadges(entry.name, t).map((badge) => (
+                                  <i key={`${entry.name}-${badge}`} className="is-special">
+                                    {badge}
+                                  </i>
+                                ))}
+                              </span>
+                            </ActionSurface>
                           ))}
                       </div>
                     );
@@ -3459,27 +3729,6 @@ export function GitHistoryPanel({
             <span>
               <GitCommit size={14} /> {t("git.historyCommits")}
             </span>
-            <div className="git-history-detail-actions">
-              <ActionSurface
-                className="git-history-mini-chip"
-                onActivate={() => void handleJumpToCommit()}
-                disabled={DISABLE_HISTORY_COMMIT_ACTIONS || DISABLE_HISTORY_ACTION_BUTTONS || Boolean(operationLoading)}
-              >
-                {t("git.historyJumpToCommit")}
-              </ActionSurface>
-              <ActionSurface
-                className="git-history-mini-chip"
-                onActivate={() => void handleCreateBranchFromCommit()}
-                disabled={
-                  DISABLE_HISTORY_COMMIT_ACTIONS
-                  || DISABLE_HISTORY_ACTION_BUTTONS
-                  || !selectedCommitSha
-                  || Boolean(operationLoading)
-                }
-              >
-                {t("git.historyBranchFromCommit")}
-              </ActionSurface>
-            </div>
           </div>
           <label className="git-history-search">
             <Search size={14} />
@@ -3527,6 +3776,7 @@ export function GitHistoryPanel({
                   className="git-history-commit-row"
                   active={active}
                   onActivate={() => setSelectedCommitSha(entry.sha)}
+                  onContextMenu={(event) => handleOpenCommitContextMenu(event, entry.sha)}
                     style={{
                       position: "absolute",
                       top: 0,
@@ -3591,40 +3841,9 @@ export function GitHistoryPanel({
 
         <section className="git-history-details">
           <div className="git-history-column-header">
-            <span>{t("git.historyCommitDetails")}</span>
-            <div className="git-history-detail-actions">
-              <ActionSurface
-                className="git-history-mini-chip"
-                disabled={
-                  DISABLE_HISTORY_COMMIT_ACTIONS
-                  || DISABLE_HISTORY_ACTION_BUTTONS
-                  || !selectedCommitSha
-                  || Boolean(operationLoading)
-                }
-                onActivate={() => {
-                  if (!workspaceId || !selectedCommitSha) {
-                    return;
-                  }
-                  void runOperation("cherry-pick", () =>
-                    cherryPickCommit(workspaceId, selectedCommitSha),
-                  );
-                }}
-              >
-                {t("git.historyCherryPick")}
-              </ActionSurface>
-              <ActionSurface
-                className="git-history-mini-chip"
-                disabled={
-                  DISABLE_HISTORY_COMMIT_ACTIONS
-                  || DISABLE_HISTORY_ACTION_BUTTONS
-                  || !selectedCommitSha
-                  || Boolean(operationLoading)
-                }
-                onActivate={() => void handleRevertSelectedCommit()}
-              >
-                {t("git.historyRevert")}
-              </ActionSurface>
-            </div>
+            <span>
+              <FileText size={14} /> {t("git.historyCommitDetails")}
+            </span>
           </div>
 
           {detailsError && (
@@ -3641,26 +3860,6 @@ export function GitHistoryPanel({
 
           {details && (
             <>
-              <div className="git-history-metadata">
-                <div>
-                  <strong>{details.summary || t("git.historyNoMessage")}</strong>
-                </div>
-                <div className="git-history-metadata-row">
-                  <code>{details.sha}</code>
-                  <span>{details.author}</span>
-                  <time>{new Date(details.commitTime * 1000).toLocaleString()}</time>
-                </div>
-                <div className="git-history-metadata-row">
-                  <span>
-                    {t("git.historyChangedFilesSummary", {
-                      count: details.files.length,
-                      additions: details.totalAdditions,
-                      deletions: details.totalDeletions,
-                    })}
-                  </span>
-                </div>
-              </div>
-
               <div
                 className="git-history-details-body"
                 ref={detailsBodyRef}
@@ -3670,8 +3869,17 @@ export function GitHistoryPanel({
               >
                 <div className="git-history-file-list">
                   <div className="git-history-file-tree-head">
-                    <FolderTree size={13} />
-                    <span>{t("git.historyChangedFiles")}</span>
+                    <span className="git-history-file-tree-head-title">
+                      <FolderTree size={13} />
+                      <span>{t("git.historyChangedFiles")}</span>
+                    </span>
+                    <span className="git-history-file-tree-head-summary">
+                      {t("git.historyChangedFilesSummary", {
+                        count: details.files.length,
+                        additions: details.totalAdditions,
+                        deletions: details.totalDeletions,
+                      })}
+                    </span>
                   </div>
 
                   {!fileTreeItems.length && (
@@ -3691,6 +3899,9 @@ export function GitHistoryPanel({
                         >
                           <span className="git-history-tree-caret" aria-hidden>
                             {item.expanded ? "▾" : "▸"}
+                          </span>
+                          <span className="git-history-tree-icon" aria-hidden>
+                            <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
                           </span>
                           <span className="git-history-tree-label">{item.label}</span>
                         </ActionSurface>
@@ -3717,9 +3928,14 @@ export function GitHistoryPanel({
                         >
                           {file.status}
                         </span>
+                        <span className="git-history-tree-icon is-file" aria-hidden>
+                          <FileIcon filePath={file.path} />
+                        </span>
                         <span className="git-history-file-path">{item.label}</span>
                         <span className="git-history-file-stats">
-                          +{file.additions} / -{file.deletions}
+                          <span className="is-add">+{file.additions}</span>
+                          <span className="is-sep">/</span>
+                          <span className="is-del">-{file.deletions}</span>
                         </span>
                       </ActionSurface>
                     );
@@ -3736,9 +3952,34 @@ export function GitHistoryPanel({
                 />
 
                 <div className="git-history-diff-view">
-                  <pre className="git-history-diff-code">
-                    {details.message.trim() || details.summary || t("git.historyNoMessage")}
-                  </pre>
+                  <div className="git-history-message-panel">
+                    <div className="git-history-message-row">
+                      <span className="git-history-message-label">{t("git.historyCommitMetaTitleLabel")}</span>
+                      <strong className="git-history-message-title">
+                        {details.summary || t("git.historyNoMessage")}
+                      </strong>
+                    </div>
+                    <div className="git-history-message-row">
+                      <span className="git-history-message-label">{t("git.historyCommitMetaContentLabel")}</span>
+                      <div className="git-history-message-content">
+                        {detailsMessageContent}
+                      </div>
+                    </div>
+                    <div className="git-history-message-meta-row">
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaAuthorLabel")}</i>
+                        <span>{details.author || t("git.unknown")}</span>
+                      </span>
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaTimeLabel")}</i>
+                        <time>{new Date(details.commitTime * 1000).toLocaleString()}</time>
+                      </span>
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaIdLabel")}</i>
+                        <code>{details.sha}</code>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3762,9 +4003,14 @@ export function GitHistoryPanel({
                         >
                           {previewDetailFile.status}
                         </span>
-                        <span>{previewDetailFile.path}</span>
+                        <span className="git-history-tree-icon is-file" aria-hidden>
+                          <FileIcon filePath={previewDetailFile.path} />
+                        </span>
+                        <span className="git-history-diff-modal-path">{previewDetailFile.path}</span>
                         <span className="git-history-diff-modal-stats">
-                          +{previewDetailFile.additions} / -{previewDetailFile.deletions}
+                          <span className="is-add">+{previewDetailFile.additions}</span>
+                          <span className="is-sep">/</span>
+                          <span className="is-del">-{previewDetailFile.deletions}</span>
                         </span>
                       </div>
                       <button
@@ -3798,6 +4044,10 @@ export function GitHistoryPanel({
                           isLoading={false}
                           error={null}
                           listView="flat"
+                          stickyHeaderMode="controls-only"
+                          showContentModeControls
+                          fullDiffLoader={previewModalFullDiffLoader}
+                          fullDiffSourceKey={selectedCommitSha}
                           diffStyle={diffViewMode}
                           onDiffStyleChange={setDiffViewMode}
                         />
@@ -3809,341 +4059,38 @@ export function GitHistoryPanel({
             </>
           )}
         </section>
-        </div>
-        {branchDiffState ? (
+        {worktreePreviewFile && (
           <div
             className="git-history-diff-modal-overlay"
             role="presentation"
-            onClick={closeBranchDiff}
-          >
-            <div
-              className={`git-history-diff-modal ${
-                branchDiffState.mode === "worktree"
-                  ? `git-history-branch-worktree-diff-modal ${branchDiffModeClassName}`
-                  : "git-history-branch-compare-modal"
-              }`}
-              role="dialog"
-              aria-modal="true"
-              aria-label={branchDiffTitle}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="git-history-diff-modal-header">
-                <div className="git-history-diff-modal-title git-history-branch-worktree-diff-title">
-                  <span className="git-history-branch-worktree-diff-title-main">
-                    <span
-                      className={`git-history-branch-worktree-diff-title-icon ${branchDiffModeClassName}`}
-                      aria-hidden
-                    >
-                      {isWorktreeDiffMode ? <FolderTree size={14} /> : <GitCommit size={14} />}
-                    </span>
-                    <span className={`git-history-branch-worktree-diff-mode-badge ${branchDiffModeClassName}`}>
-                      {branchDiffModeLabel}
-                    </span>
-                    <span className="git-history-branch-worktree-diff-title-text">{branchDiffTitle}</span>
-                  </span>
-                  <span className="git-history-branch-worktree-diff-subtitle">{branchDiffSubtitle}</span>
-                  <span className="git-history-diff-modal-stats git-history-branch-worktree-diff-stats">
-                    {branchDiffStatsLabel}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="git-history-diff-modal-close"
-                  onClick={closeBranchDiff}
-                  aria-label={t("common.close")}
-                  title={t("common.close")}
-                >
-                  <span className="git-history-diff-modal-close-glyph" aria-hidden>
-                    ×
-                  </span>
-                </button>
-              </div>
-
-              {branchDiffState.loading ? (
-                <div className="git-history-empty">{t("common.loading")}</div>
-              ) : branchDiffState.error ? (
-                <div className="git-history-error">{branchDiffState.error}</div>
-              ) : branchDiffState.mode === "worktree" ? (
-                branchDiffState.files.length === 0 ? (
-                  <div className="git-history-empty">{t("git.historyBranchWorktreeDiffEmpty")}</div>
-                ) : (
-                  <div className="git-history-branch-worktree-diff-layout">
-                    <div className="git-history-branch-worktree-diff-detail">
-                      {!branchDiffState.selectedPath ? (
-                        <div className="git-history-empty">
-                          {t("git.historyBranchWorktreeDiffSelectFile")}
-                        </div>
-                      ) : branchDiffState.selectedDiffLoading ? (
-                        <div className="git-history-empty">{t("common.loading")}</div>
-                      ) : branchDiffState.selectedDiffError ? (
-                        <div className="git-history-error">{branchDiffState.selectedDiffError}</div>
-                      ) : branchDiffState.selectedDiff ? (
-                        <div className="git-history-diff-modal-viewer">
-                          <GitDiffViewer
-                            workspaceId={workspaceId}
-                            diffs={[branchDiffState.selectedDiff]}
-                            selectedPath={branchDiffState.selectedDiff.path}
-                            isLoading={false}
-                            error={null}
-                            listView="flat"
-                            diffStyle={diffViewMode}
-                            onDiffStyleChange={setDiffViewMode}
-                          />
-                        </div>
-                      ) : (
-                        <div className="git-history-empty">{t("git.diffUnavailable")}</div>
-                      )}
-                    </div>
-                    <div className="git-history-branch-worktree-diff-files">
-                      <div className="git-history-branch-worktree-diff-files-title">
-                        {t("git.historyBranchWorktreeDiffFilesTitle")}
-                      </div>
-                      <div className="git-history-branch-worktree-diff-files-list">
-                        {branchDiffState.files.map((entry) => (
-                          <button
-                            key={entry.path}
-                            type="button"
-                            className={`git-history-branch-worktree-diff-file${
-                              branchDiffState.selectedPath === entry.path ? " is-active" : ""
-                            }`}
-                            onClick={() => {
-                              void handleSelectWorktreeDiffFile(
-                                branchDiffState.branch,
-                                branchDiffState.compareBranch,
-                                entry,
-                              );
-                            }}
-                          >
-                            <span
-                              className={`git-history-file-status git-status-${entry.status.toLowerCase()}`}
-                            >
-                              {entry.status}
-                            </span>
-                            <span className="git-history-branch-worktree-diff-file-path">
-                              {entry.path}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="git-history-branch-compare-layout">
-                  <div className="git-history-branch-compare-lists">
-                    <section className="git-history-branch-compare-list-card is-target">
-                      <header className="git-history-branch-compare-list-header is-target">
-                        <span className="git-history-branch-compare-list-title-wrap">
-                          <span className="git-history-branch-compare-list-dot" aria-hidden />
-                          <span className="git-history-branch-compare-list-title">
-                            {t("git.historyBranchCompareDirectionTargetOnly", {
-                              target: branchDiffState.branch,
-                              current: branchDiffState.compareBranch,
-                            })}
-                          </span>
-                        </span>
-                        <span className="git-history-branch-compare-list-count">
-                          {t("git.historyCommitCount", { count: branchDiffState.targetOnlyCommits.length })}
-                        </span>
-                      </header>
-                      {branchDiffState.targetOnlyCommits.length === 0 ? (
-                        <div className="git-history-empty">
-                          {t("git.historyBranchCompareDirectionEmpty")}
-                        </div>
-                      ) : (
-                        <div className="git-history-branch-compare-list">
-                          {branchDiffState.targetOnlyCommits.map((entry) => (
-                            <button
-                              key={`target-${entry.sha}`}
-                              type="button"
-                              className={`git-history-branch-compare-commit${
-                                branchDiffState.selectedDirection === "targetOnly"
-                                && branchDiffState.selectedCommitSha === entry.sha
-                                  ? " is-active"
-                                  : ""
-                              }`}
-                              onClick={() => {
-                                void handleSelectBranchCompareCommit(
-                                  branchDiffState.branch,
-                                  branchDiffState.compareBranch,
-                                  "targetOnly",
-                                  entry,
-                                );
-                              }}
-                            >
-                              <span className="git-history-branch-compare-commit-summary">
-                                {entry.summary || t("git.historyNoMessage")}
-                              </span>
-                              <span className="git-history-branch-compare-commit-meta">
-                                <code>{entry.shortSha}</code>
-                                <span>{entry.author}</span>
-                                <time>{formatRelativeTime(entry.timestamp, t)}</time>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-
-                    <section className="git-history-branch-compare-list-card is-current">
-                      <header className="git-history-branch-compare-list-header is-current">
-                        <span className="git-history-branch-compare-list-title-wrap">
-                          <span className="git-history-branch-compare-list-dot" aria-hidden />
-                          <span className="git-history-branch-compare-list-title">
-                            {t("git.historyBranchCompareDirectionCurrentOnly", {
-                              target: branchDiffState.branch,
-                              current: branchDiffState.compareBranch,
-                            })}
-                          </span>
-                        </span>
-                        <span className="git-history-branch-compare-list-count">
-                          {t("git.historyCommitCount", { count: branchDiffState.currentOnlyCommits.length })}
-                        </span>
-                      </header>
-                      {branchDiffState.currentOnlyCommits.length === 0 ? (
-                        <div className="git-history-empty">
-                          {t("git.historyBranchCompareDirectionEmpty")}
-                        </div>
-                      ) : (
-                        <div className="git-history-branch-compare-list">
-                          {branchDiffState.currentOnlyCommits.map((entry) => (
-                            <button
-                              key={`current-${entry.sha}`}
-                              type="button"
-                              className={`git-history-branch-compare-commit${
-                                branchDiffState.selectedDirection === "currentOnly"
-                                && branchDiffState.selectedCommitSha === entry.sha
-                                  ? " is-active"
-                                  : ""
-                              }`}
-                              onClick={() => {
-                                void handleSelectBranchCompareCommit(
-                                  branchDiffState.branch,
-                                  branchDiffState.compareBranch,
-                                  "currentOnly",
-                                  entry,
-                                );
-                              }}
-                            >
-                              <span className="git-history-branch-compare-commit-summary">
-                                {entry.summary || t("git.historyNoMessage")}
-                              </span>
-                              <span className="git-history-branch-compare-commit-meta">
-                                <code>{entry.shortSha}</code>
-                                <span>{entry.author}</span>
-                                <time>{formatRelativeTime(entry.timestamp, t)}</time>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-                  </div>
-
-                  <div className="git-history-branch-compare-detail">
-                    {!branchDiffState.selectedCommitSha ? (
-                      <div className="git-history-empty">
-                        {t("git.historyBranchCompareSelectCommit")}
-                      </div>
-                    ) : branchDiffState.selectedCommitLoading ? (
-                      <div className="git-history-empty">{t("common.loading")}</div>
-                    ) : branchDiffState.selectedCommitError ? (
-                      <div className="git-history-error">{branchDiffState.selectedCommitError}</div>
-                    ) : branchDiffState.selectedCommitDetails ? (
-                      <div className="git-history-branch-compare-detail-body">
-                        <div className="git-history-branch-compare-detail-summary">
-                          {branchDiffState.selectedCommitDetails.summary || t("git.historyNoMessage")}
-                        </div>
-                        <div className="git-history-branch-compare-detail-meta">
-                          <code>{branchDiffState.selectedCommitDetails.sha.slice(0, 7)}</code>
-                          <span>{branchDiffState.selectedCommitDetails.author}</span>
-                          <time>
-                            {new Date(branchDiffState.selectedCommitDetails.commitTime * 1000).toLocaleString()}
-                          </time>
-                        </div>
-                        {branchDiffState.selectedCommitDetails.message.trim().length > 0 ? (
-                          <pre className="git-history-branch-compare-detail-message">
-                            {branchDiffState.selectedCommitDetails.message.trim()}
-                          </pre>
-                        ) : null}
-                        <div className="git-history-branch-compare-files-title">
-                          {t("git.historyChangedFilesSummary", {
-                            count: branchDiffState.selectedCommitDetails.files.length,
-                            additions: branchDiffState.selectedCommitDetails.totalAdditions,
-                            deletions: branchDiffState.selectedCommitDetails.totalDeletions,
-                          })}
-                        </div>
-                        {branchDiffState.selectedCommitDetails.files.length === 0 ? (
-                          <div className="git-history-empty">{t("git.historyNoFileChangesInCommit")}</div>
-                        ) : (
-                          <div className="git-history-branch-compare-files-list">
-                            {branchDiffState.selectedCommitDetails.files.map((file) => {
-                              const fileKey = buildFileKey(file);
-                              return (
-                                <button
-                                  key={fileKey}
-                                  type="button"
-                                  className={`git-history-branch-compare-file${
-                                    comparePreviewFileKey === fileKey ? " is-active" : ""
-                                  }`}
-                                  onClick={() => setComparePreviewFileKey(fileKey)}
-                                  title={statusLabel(file)}
-                                >
-                                  <span
-                                    className={`git-history-file-status git-status-${file.status.toLowerCase()}`}
-                                  >
-                                    {file.status}
-                                  </span>
-                                  <span className="git-history-branch-compare-file-path">
-                                    {statusLabel(file)}
-                                  </span>
-                                  <span className="git-history-branch-compare-file-stats">
-                                    +{file.additions} / -{file.deletions}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="git-history-empty">{t("git.diffUnavailable")}</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
-        {comparePreviewDetailFile ? (
-          <div
-            className="git-history-diff-modal-overlay"
-            role="presentation"
-            onClick={() => setComparePreviewFileKey(null)}
+            onClick={closeWorktreePreview}
           >
             <div
               className="git-history-diff-modal"
               role="dialog"
               aria-modal="true"
-              aria-label={comparePreviewDetailFile.path}
+              aria-label={worktreePreviewFile.path}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="git-history-diff-modal-header">
                 <div className="git-history-diff-modal-title">
-                  <span
-                    className={`git-history-file-status git-status-${comparePreviewDetailFile.status.toLowerCase()}`}
-                  >
-                    {comparePreviewDetailFile.status}
+                  <span className={`git-history-file-status git-status-${worktreePreviewFile.status.toLowerCase()}`}>
+                    {worktreePreviewFile.status}
                   </span>
-                  <span>{comparePreviewDetailFile.path}</span>
+                  <span className="git-history-tree-icon is-file" aria-hidden>
+                    <FileIcon filePath={worktreePreviewFile.path} />
+                  </span>
+                  <span className="git-history-diff-modal-path">{worktreePreviewFile.path}</span>
                   <span className="git-history-diff-modal-stats">
-                    +{comparePreviewDetailFile.additions} / -{comparePreviewDetailFile.deletions}
+                    <span className="is-add">+{worktreePreviewFile.additions}</span>
+                    <span className="is-sep">/</span>
+                    <span className="is-del">-{worktreePreviewFile.deletions}</span>
                   </span>
                 </div>
                 <button
                   type="button"
                   className="git-history-diff-modal-close"
-                  onClick={() => setComparePreviewFileKey(null)}
+                  onClick={closeWorktreePreview}
                   aria-label={t("common.close")}
                   title={t("common.close")}
                 >
@@ -4152,25 +4099,28 @@ export function GitHistoryPanel({
                   </span>
                 </button>
               </div>
-
-              {comparePreviewDetailFile.truncated && !comparePreviewDetailFile.isBinary && (
-                <div className="git-history-warning">
-                  {t("git.historyDiffTooLargeTruncated", {
-                    lineCount: comparePreviewDetailFile.lineCount,
-                  })}
+              {worktreePreviewError ? (
+                <div className="git-history-error">
+                  {localizeKnownGitError(worktreePreviewError) ?? worktreePreviewError}
                 </div>
-              )}
-              {comparePreviewDetailFile.isBinary ? (
-                <pre className="git-history-diff-modal-code">{comparePreviewDetailFileDiff}</pre>
+              ) : null}
+              {worktreePreviewLoading ? (
+                <div className="git-history-empty">{t("common.loading")}</div>
+              ) : worktreePreviewFile.isBinary || !(worktreePreviewFile.diff ?? "").trim() ? (
+                <pre className="git-history-diff-modal-code">{worktreePreviewDiffText}</pre>
               ) : (
                 <div className="git-history-diff-modal-viewer">
                   <GitDiffViewer
                     workspaceId={workspaceId}
-                    diffs={comparePreviewDiffEntries}
-                    selectedPath={comparePreviewDetailFile.path}
+                    diffs={worktreePreviewDiffEntries}
+                    selectedPath={worktreePreviewFile.path}
                     isLoading={false}
                     error={null}
                     listView="flat"
+                    stickyHeaderMode="controls-only"
+                    showContentModeControls
+                    fullDiffLoader={worktreePreviewFullDiffLoader}
+                    fullDiffSourceKey={worktreePreviewFile.path}
                     diffStyle={diffViewMode}
                     onDiffStyleChange={setDiffViewMode}
                   />
@@ -4178,47 +4128,754 @@ export function GitHistoryPanel({
               )}
             </div>
           </div>
-        ) : null}
-        {branchContextMenu ? (
-          <div className="git-history-branch-context-backdrop">
-            <div
-              ref={branchContextMenuRef}
-              className="git-history-branch-context-menu"
-              role="menu"
-              style={branchContextMenuStyle}
-              onKeyDown={handleBranchContextMenuKeyDown}
-            >
-              {branchContextTrackingSummary ? (
-                <div className="git-history-branch-context-tracking" aria-label={t("git.upstream")}>
-                  <span className="git-history-branch-context-tracking-text">
-                    {branchContextTrackingSummary}
-                  </span>
-                </div>
-              ) : null}
-              {branchContextActions.map((action) => (
-                <div
-                  key={action.id}
-                  className={`git-history-branch-context-item-wrap${action.dividerBefore ? " with-divider" : ""}`}
-                >
+        )}
+        </div>
+        {commitContextMenu ? (
+          <div
+            className="git-history-commit-context-menu"
+            role="menu"
+            style={{
+              top: Math.max(8, commitContextMenu.y),
+              left: Math.max(8, commitContextMenu.x),
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {contextPrimaryActionGroups.map(({ groupKey, items }) => (
+              <div key={groupKey} className="git-history-commit-context-group">
+                {items.map((action) => (
                   <button
+                    key={action.id}
                     type="button"
-                    className={`git-history-branch-context-item${action.disabled ? " is-disabled" : ""}${
-                      action.tone === "danger" ? " is-danger" : ""
-                    }`}
                     role="menuitem"
+                    className="git-history-commit-context-item"
                     disabled={action.disabled}
-                    title={action.disabledReason ?? undefined}
+                    title={action.disabledReason ?? action.label}
                     onClick={() => {
-                      action.onSelect();
+                      if (action.disabled) {
+                        return;
+                      }
+                      runCommitAction(action.id, commitContextMenu.commitSha);
+                      setCommitContextMenu(null);
                     }}
                   >
-                    <span className="git-history-branch-context-item-main">
-                      <span className="git-history-branch-context-item-icon">{action.icon}</span>
-                      <span className="git-history-branch-context-item-label">{action.label}</span>
+                    <span className="git-history-commit-context-item-icon" aria-hidden>
+                      {getCommitActionIcon(action.id, 13)}
                     </span>
+                    <span className="git-history-commit-context-item-label">{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            {contextWriteActions.length > 0 ? (
+              <div className="git-history-commit-context-group">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="git-history-commit-context-item is-more"
+                  disabled={contextWriteActions.every((action) => action.disabled)}
+                  title={contextMoreDisabledReason ?? t("git.historyMoreOperations")}
+                  onClick={() => setCommitContextMoreOpen((prev) => !prev)}
+                >
+                  <span className="git-history-commit-context-item-icon" aria-hidden>
+                    <LayoutGrid size={13} strokeWidth={1.9} />
+                  </span>
+                  <span className="git-history-commit-context-item-label">
+                    {t("git.historyMoreOperations")}
+                  </span>
+                  <span
+                    className={`git-history-commit-context-item-chevron${commitContextMoreOpen ? " is-open" : ""}`}
+                    aria-hidden
+                  >
+                    <ChevronRight size={13} strokeWidth={2} />
+                  </span>
+                </button>
+                {commitContextMoreOpen ? (
+                  <div className="git-history-commit-context-submenu" role="menu">
+                    {contextWriteActions.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        role="menuitem"
+                        className="git-history-commit-context-item"
+                        disabled={action.disabled}
+                        title={action.disabledReason ?? action.label}
+                        onClick={() => {
+                          if (action.disabled) {
+                            return;
+                          }
+                          runCommitAction(action.id, commitContextMenu.commitSha);
+                          setCommitContextMenu(null);
+                        }}
+                      >
+                        <span className="git-history-commit-context-item-icon" aria-hidden>
+                          {getCommitActionIcon(action.id, 13)}
+                        </span>
+                        <span className="git-history-commit-context-item-label">{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {pushDialogOpen ? (
+          <div
+            className="git-history-create-branch-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !pushSubmitting) {
+                setPushDialogOpen(false);
+              }
+            }}
+          >
+            <div
+              className="git-history-push-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("git.historyPushDialogTitle")}
+            >
+              <div className="git-history-push-hero">
+                <div className="git-history-create-branch-title git-history-push-title">
+                  <Upload size={14} />
+                  <span>{t("git.historyPushDialogTitle")}</span>
+                </div>
+                <div className="git-history-push-summary-row">
+                  <div className="git-history-push-target-wrap">
+                    <div className="git-history-push-target">
+                      {t("git.historyPushDialogTarget", {
+                        sourceBranch: currentBranch || "HEAD",
+                        remote: pushRemoteTrimmed || "origin",
+                        targetBranch: pushTargetSummaryBranch,
+                      })}
+                    </div>
+                    {pushIsNewBranchTarget ? (
+                      <span className="git-history-push-target-badge">
+                        ({t("git.historyPushDialogTargetNewTag")})
+                      </span>
+                    ) : null}
+                  </div>
+                  <code className="git-history-push-readonly">{currentBranch || "HEAD"}</code>
+                </div>
+              </div>
+              {!pushIsNewBranchTarget ? (
+                <div className="git-history-push-section git-history-push-section-preview">
+                  <div className="git-history-push-preview">
+                    <div className="git-history-push-preview-pane is-commits">
+                      <div className="git-history-push-preview-head">
+                        <span className="git-history-push-preview-title">
+                          <GitCommit size={12} />
+                          {t("git.historyPushDialogPreviewCommits")}
+                        </span>
+                        <strong>{pushPreviewCommits.length}</strong>
+                      </div>
+                      {!pushPreviewError && pushPreviewLoading ? (
+                        <div className="git-history-push-preview-empty">
+                          {t("git.historyPushDialogPreviewLoading")}
+                        </div>
+                      ) : null}
+                      {pushPreviewError ? (
+                        <div className="git-history-push-preview-error">
+                          {localizeKnownGitError(pushPreviewError) ?? pushPreviewError}
+                        </div>
+                      ) : null}
+                      {!pushPreviewError && !pushPreviewLoading && !pushHasOutgoingCommits ? (
+                        <div className="git-history-push-preview-empty">
+                          {t("git.historyPushDialogPreviewNoOutgoing")}
+                        </div>
+                      ) : null}
+                      {!pushPreviewError && !pushPreviewLoading && pushHasOutgoingCommits ? (
+                        <div className="git-history-push-preview-commit-list">
+                          {pushPreviewCommits.map((entry) => {
+                            const active = entry.sha === pushPreviewSelectedSha;
+                            return (
+                              <button
+                                key={entry.sha}
+                                type="button"
+                                className={`git-history-push-preview-commit${active ? " is-active" : ""}`}
+                                onClick={() => setPushPreviewSelectedSha(entry.sha)}
+                              >
+                                <span className="git-history-push-preview-commit-summary">
+                                  {entry.summary || t("git.historyNoMessage")}
+                                </span>
+                                <span className="git-history-push-preview-commit-meta">
+                                  <code>{entry.shortSha}</code>
+                                  <em>{entry.author || t("git.unknown")}</em>
+                                  <time>{formatRelativeTime(entry.timestamp, t)}</time>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {!pushPreviewError && pushPreviewHasMore ? (
+                        <div className="git-history-push-preview-hint">
+                          {t("git.historyPushDialogPreviewHasMore", {
+                            count: pushPreviewCommits.length,
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="git-history-push-preview-pane is-details">
+                      <div className="git-history-push-preview-head">
+                        <span className="git-history-push-preview-title">
+                          <FileText size={12} />
+                          {t("git.historyPushDialogPreviewDetails")}
+                        </span>
+                      </div>
+                      {!pushPreviewError && pushPreviewDetailsLoading ? (
+                        <div className="git-history-push-preview-empty">
+                          {t("git.historyPushDialogPreviewLoadingDetails")}
+                        </div>
+                      ) : null}
+                      {pushPreviewDetailsError ? (
+                        <div className="git-history-push-preview-error">
+                          {localizeKnownGitError(pushPreviewDetailsError) ?? pushPreviewDetailsError}
+                        </div>
+                      ) : null}
+                      {!pushPreviewDetailsLoading &&
+                      !pushPreviewDetailsError &&
+                      !pushPreviewSelectedCommit ? (
+                        <div className="git-history-push-preview-empty">
+                          {t("git.historyPushDialogPreviewSelectCommit")}
+                        </div>
+                      ) : null}
+                      {pushPreviewDetails && !pushPreviewDetailsLoading && !pushPreviewDetailsError ? (
+                        <div className="git-history-push-preview-details">
+                          <div className="git-history-push-preview-metadata">
+                            <strong>{pushPreviewDetails.summary || t("git.historyNoMessage")}</strong>
+                            <span className="git-history-push-preview-metadata-row">
+                              <code>{pushPreviewDetails.sha}</code>
+                              <em>{pushPreviewDetails.author || t("git.unknown")}</em>
+                              <time>{new Date(pushPreviewDetails.commitTime * 1000).toLocaleString()}</time>
+                            </span>
+                          </div>
+                          <div className="git-history-push-preview-file-head">
+                            <FolderTree size={12} />
+                            <span>{t("git.historyPushDialogPreviewFiles")}</span>
+                            <i>{pushPreviewDetails.files.length}</i>
+                          </div>
+                          <div className="git-history-push-preview-file-tree">
+                            {pushPreviewFileTreeItems.length > 0 ? (
+                              pushPreviewFileTreeItems.map((item) => {
+                                if (item.type === "dir") {
+                                  return (
+                                    <ActionSurface
+                                      key={`push-preview-${item.id}`}
+                                      className="git-history-tree-item git-history-tree-dir"
+                                      onActivate={() => handlePushPreviewDirToggle(item.path)}
+                                      style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                                    >
+                                      <span className="git-history-tree-caret" aria-hidden>
+                                        {item.expanded ? "▾" : "▸"}
+                                      </span>
+                                      <span className="git-history-tree-icon" aria-hidden>
+                                        <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
+                                      </span>
+                                      <span className="git-history-tree-label">{item.label}</span>
+                                    </ActionSurface>
+                                  );
+                                }
+                                const file = item.change;
+                                const fileKey = buildFileKey(file);
+                                const active = pushPreviewSelectedFileKey === fileKey;
+                                return (
+                                  <ActionSurface
+                                    key={`push-preview-${item.id}`}
+                                    className="git-history-tree-item git-history-file-item"
+                                    active={active}
+                                    onActivate={() => {
+                                      setPushPreviewSelectedFileKey(fileKey);
+                                      setPushPreviewModalFileKey(fileKey);
+                                    }}
+                                    style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                                    title={statusLabel(file)}
+                                  >
+                                    <span
+                                      className={`git-history-file-status git-status-${file.status.toLowerCase()}`}
+                                    >
+                                      {file.status}
+                                    </span>
+                                    <span className="git-history-tree-icon is-file" aria-hidden>
+                                      <FileIcon filePath={file.path} />
+                                    </span>
+                                    <span className="git-history-file-path">{item.label}</span>
+                                    <span className="git-history-file-stats">
+                                      <span className="is-add">+{file.additions}</span>
+                                      <span className="is-sep">/</span>
+                                      <span className="is-del">-{file.deletions}</span>
+                                    </span>
+                                  </ActionSurface>
+                                );
+                              })
+                            ) : (
+                              <div className="git-history-push-preview-empty">
+                                {t("git.historyNoFileChangesInCommit")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="git-history-push-section git-history-push-section-preview">
+                  <div className="git-history-push-preview">
+                    <div className="git-history-push-preview-pane is-commits">
+                      <div className="git-history-push-preview-head">
+                        <span className="git-history-push-preview-title">
+                          <GitCommit size={12} />
+                          {t("git.historyPushDialogPreviewCommits")}
+                        </span>
+                        <strong>{t("git.historyPushDialogTargetNewTag")}</strong>
+                      </div>
+                      <div className="git-history-push-preview-empty">
+                        {t("git.historyPushDialogNewBranchPreviewTitle")}
+                      </div>
+                      <div className="git-history-push-preview-hint">
+                        {t("git.historyPushDialogPreviewTargetMissing", {
+                          remote: pushRemoteTrimmed || "origin",
+                          branch: pushTargetBranchTrimmed || "main",
+                        })}
+                      </div>
+                    </div>
+                    <div className="git-history-push-preview-pane is-details">
+                      <div className="git-history-push-preview-head">
+                        <span className="git-history-push-preview-title">
+                          <FileText size={12} />
+                          {t("git.historyPushDialogPreviewDetails")}
+                        </span>
+                      </div>
+                      <div className="git-history-push-preview-empty">
+                        {t("git.historyPushDialogNewBranchPreviewHint")}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {pushPreviewModalFile && typeof document !== "undefined"
+                ? createPortal(
+                    <div
+                      className="git-history-diff-modal-overlay is-popup"
+                      role="presentation"
+                      onClick={() => setPushPreviewModalFileKey(null)}
+                    >
+                      <div
+                        className="git-history-diff-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={pushPreviewModalFile.path}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="git-history-diff-modal-header">
+                          <div className="git-history-diff-modal-title">
+                            <span
+                              className={`git-history-file-status git-status-${pushPreviewModalFile.status.toLowerCase()}`}
+                            >
+                              {pushPreviewModalFile.status}
+                            </span>
+                            <span className="git-history-tree-icon is-file" aria-hidden>
+                              <FileIcon filePath={pushPreviewModalFile.path} />
+                            </span>
+                            <span className="git-history-diff-modal-path">{pushPreviewModalFile.path}</span>
+                            <span className="git-history-diff-modal-stats">
+                              <span className="is-add">+{pushPreviewModalFile.additions}</span>
+                              <span className="is-sep">/</span>
+                              <span className="is-del">-{pushPreviewModalFile.deletions}</span>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="git-history-diff-modal-close"
+                            onClick={() => setPushPreviewModalFileKey(null)}
+                            aria-label={t("common.close")}
+                            title={t("common.close")}
+                          >
+                            <span className="git-history-diff-modal-close-glyph" aria-hidden>
+                              ×
+                            </span>
+                          </button>
+                        </div>
+
+                        {pushPreviewModalFile.truncated && !pushPreviewModalFile.isBinary ? (
+                          <div className="git-history-warning">
+                            {t("git.historyDiffTooLargeTruncated", {
+                              lineCount: pushPreviewModalFile.lineCount,
+                            })}
+                          </div>
+                        ) : null}
+                        {pushPreviewModalFile.isBinary ? (
+                          <pre className="git-history-diff-modal-code">{pushPreviewModalFileDiff}</pre>
+                        ) : (
+                          <div className="git-history-diff-modal-viewer">
+                            <GitDiffViewer
+                              workspaceId={workspaceId}
+                              diffs={pushPreviewModalDiffEntries}
+                              selectedPath={pushPreviewModalFile.path}
+                              isLoading={false}
+                              error={null}
+                              listView="flat"
+                              stickyHeaderMode="controls-only"
+                              showContentModeControls
+                              fullDiffLoader={pushPreviewModalFullDiffLoader}
+                              fullDiffSourceKey={pushPreviewSelectedSha}
+                              diffStyle={diffViewMode}
+                              onDiffStyleChange={setDiffViewMode}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>,
+                    document.body,
+                  )
+                : null}
+              <div className="git-history-push-section git-history-push-section-controls">
+                <div className="git-history-push-grid">
+                  <div className="git-history-create-branch-field">
+                    <span className="git-history-push-field-label">
+                      <Cloud size={12} />
+                      {t("git.historyPushDialogRemoteLabel")}
+                    </span>
+                    <div
+                      className={`git-history-push-picker${pushRemoteMenuOpen ? " is-open" : ""}`}
+                      ref={pushRemotePickerRef}
+                    >
+                      <button
+                        type="button"
+                        className="git-history-push-picker-trigger"
+                        aria-label={t("git.historyPushDialogRemoteLabel")}
+                        aria-haspopup="listbox"
+                        aria-expanded={pushRemoteMenuOpen}
+                        disabled={pushSubmitting}
+                        onClick={() => {
+                          if (pushSubmitting) {
+                            return;
+                          }
+                          setPushTargetBranchMenuOpen(false);
+                          setPushRemoteMenuOpen((previous) => {
+                            const nextOpen = !previous;
+                            if (nextOpen) {
+                              updatePushRemoteMenuPlacement();
+                            }
+                            return nextOpen;
+                          });
+                        }}
+                      >
+                        <Cloud size={12} className="git-history-push-picker-leading-icon" />
+                        <span className="git-history-push-picker-value">{pushRemoteTrimmed || "origin"}</span>
+                        <ChevronDown size={13} className="git-history-push-picker-caret" />
+                      </button>
+                      {pushRemoteMenuOpen ? (
+                        <div
+                          className={`git-history-push-picker-menu popover-surface${
+                            pushRemoteMenuPlacement === "up" ? " is-upward" : ""
+                          }`}
+                          role="listbox"
+                          aria-label={t("git.historyPushDialogRemoteLabel")}
+                        >
+                          {pushRemoteOptions.map((remoteName) => (
+                            <button
+                              key={remoteName}
+                              type="button"
+                              className={`git-history-push-picker-item${remoteName === pushRemoteTrimmed ? " is-active" : ""}`}
+                              role="option"
+                              aria-selected={remoteName === pushRemoteTrimmed}
+                              onClick={() => handleSelectPushRemote(remoteName)}
+                            >
+                              <Cloud size={12} className="git-history-push-picker-item-icon" />
+                              <span className="git-history-push-picker-item-content">{remoteName}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <label
+                    className="git-history-create-branch-field git-history-push-target-field"
+                    ref={pushTargetBranchFieldRef}
+                  >
+                    <span className="git-history-push-field-label">
+                      <GitBranch size={12} />
+                      {t("git.historyPushDialogTargetBranchLabel")}
+                    </span>
+                    <div
+                      className={`git-history-push-combobox${pushTargetBranchMenuOpen ? " is-open" : ""}`}
+                      ref={pushTargetBranchPickerRef}
+                    >
+                      <input
+                        value={pushTargetBranch}
+                        disabled={pushSubmitting}
+                        onChange={(event) => {
+                          setPushTargetBranch(event.target.value);
+                          setPushTargetBranchQuery(event.target.value);
+                          if (!pushTargetBranchMenuOpen) {
+                            openPushTargetBranchMenu(false);
+                          }
+                        }}
+                        onFocus={() => openPushTargetBranchMenu(false)}
+                        aria-label={t("git.historyPushDialogTargetBranchLabel")}
+                        placeholder={currentBranch ?? "main"}
+                      />
+                      <button
+                        type="button"
+                        className="git-history-push-combobox-toggle"
+                        aria-label={`${t("git.historyPushDialogTargetBranchLabel")} toggle`}
+                        aria-haspopup="listbox"
+                        aria-expanded={pushTargetBranchMenuOpen}
+                        disabled={pushSubmitting}
+                        onClick={() => {
+                          if (pushSubmitting) {
+                            return;
+                          }
+                          const nextOpen = !pushTargetBranchMenuOpen;
+                          if (nextOpen) {
+                            openPushTargetBranchMenu(true);
+                            return;
+                          }
+                          setPushTargetBranchMenuOpen(false);
+                        }}
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                    </div>
+                    {pushTargetBranchMenuOpen ? (
+                      <div
+                        className={`git-history-push-picker-menu git-history-push-target-menu popover-surface${
+                          pushTargetBranchMenuPlacement === "up" ? " is-upward" : ""
+                        }`}
+                        role="listbox"
+                        aria-label={t("git.historyPushDialogTargetBranchLabel")}
+                      >
+                        {pushTargetBranchGroups.length > 0 ? (
+                          pushTargetBranchGroups.map((group) => (
+                            <div key={group.scope} className="git-history-push-picker-group">
+                              <div className="git-history-push-picker-group-label">
+                                <FolderTree size={11} />
+                                <span>{group.label}</span>
+                                <i>{group.items.length}</i>
+                              </div>
+                              {group.items.map((branchName) => (
+                                <button
+                                  key={branchName}
+                                  type="button"
+                                  className={`git-history-push-picker-item${branchName === pushTargetBranchTrimmed ? " is-active" : ""}`}
+                                  role="option"
+                                  aria-selected={branchName === pushTargetBranchTrimmed}
+                                  onClick={() => handleSelectPushTargetBranch(branchName)}
+                                >
+                                  <GitBranch size={12} className="git-history-push-picker-item-icon" />
+                                  <span className="git-history-push-picker-item-content">
+                                    <span className="git-history-push-picker-item-title">
+                                      {getBranchLeafName(branchName)}
+                                    </span>
+                                    {getBranchScope(branchName) !== "__root__" ? (
+                                      <span className="git-history-push-picker-item-subtitle">{branchName}</span>
+                                    ) : null}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="git-history-push-picker-empty">
+                            {t("git.historyPushDialogNoRemoteBranches")}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className={`git-history-push-toggle${pushToGerrit ? " is-active" : ""}`}
+                  aria-pressed={pushToGerrit}
+                  disabled={pushSubmitting}
+                  onClick={() => setPushToGerrit((previous) => !previous)}
+                >
+                  <span className="git-history-push-toggle-indicator" aria-hidden>
+                    {pushToGerrit ? "✓" : ""}
+                  </span>
+                  <Upload size={12} className="git-history-push-toggle-icon" />
+                  <span>{t("git.historyPushDialogPushToGerrit")}</span>
+                </button>
+                {pushToGerrit ? (
+                  <>
+                    <div className="git-history-push-hint">
+                      {t("git.historyPushDialogGerritHint", {
+                        branch: pushTargetBranchTrimmed || currentBranch || "main",
+                      })}
+                    </div>
+                    <div className="git-history-push-grid">
+                      <label className="git-history-create-branch-field">
+                        <span>{t("git.historyPushDialogTopicLabel")}</span>
+                        <input
+                          value={pushTopic}
+                          disabled={pushSubmitting}
+                          onChange={(event) => setPushTopic(event.target.value)}
+                        />
+                      </label>
+                      <label className="git-history-create-branch-field">
+                        <span>{t("git.historyPushDialogReviewersLabel")}</span>
+                        <input
+                          value={pushReviewers}
+                          disabled={pushSubmitting}
+                          onChange={(event) => setPushReviewers(event.target.value)}
+                          placeholder={t("git.historyPushDialogCommaSeparatedHint")}
+                        />
+                      </label>
+                      <label className="git-history-create-branch-field">
+                        <span>{t("git.historyPushDialogCcLabel")}</span>
+                        <input
+                          value={pushCc}
+                          disabled={pushSubmitting}
+                          onChange={(event) => setPushCc(event.target.value)}
+                          placeholder={t("git.historyPushDialogCommaSeparatedHint")}
+                        />
+                      </label>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+              <div className="git-history-push-footer">
+                <div className="git-history-push-options">
+                  <button
+                    type="button"
+                    className={`git-history-push-toggle${pushTags ? " is-active" : ""}`}
+                    aria-pressed={pushTags}
+                    disabled={pushSubmitting}
+                    onClick={() => setPushTags((previous) => !previous)}
+                  >
+                    <span className="git-history-push-toggle-indicator" aria-hidden>
+                      {pushTags ? "✓" : ""}
+                    </span>
+                    <GitBranch size={12} className="git-history-push-toggle-icon" />
+                    <span>{t("git.historyPushDialogPushTags")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`git-history-push-toggle${pushRunHooks ? " is-active" : ""}`}
+                    aria-pressed={pushRunHooks}
+                    disabled={pushSubmitting}
+                    onClick={() => setPushRunHooks((previous) => !previous)}
+                  >
+                    <span className="git-history-push-toggle-indicator" aria-hidden>
+                      {pushRunHooks ? "✓" : ""}
+                    </span>
+                    <RefreshCw size={12} className="git-history-push-toggle-icon" />
+                    <span>{t("git.historyPushDialogRunHooks")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`git-history-push-toggle${pushForceWithLease ? " is-active" : ""}`}
+                    aria-pressed={pushForceWithLease}
+                    disabled={pushSubmitting}
+                    onClick={() => setPushForceWithLease((previous) => !previous)}
+                  >
+                    <span className="git-history-push-toggle-indicator" aria-hidden>
+                      {pushForceWithLease ? "✓" : ""}
+                    </span>
+                    <Repeat size={12} className="git-history-push-toggle-icon" />
+                    <span>{t("git.historyPushDialogForceWithLease")}</span>
                   </button>
                 </div>
-              ))}
+                <div className="git-history-create-branch-actions">
+                  <button
+                    type="button"
+                    className="git-history-create-branch-btn is-cancel"
+                    disabled={pushSubmitting}
+                    onClick={() => setPushDialogOpen(false)}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className="git-history-create-branch-btn is-confirm"
+                    disabled={!pushCanConfirm}
+                    title={
+                      !pushCanConfirm && !pushPreviewLoading && !pushHasOutgoingCommits
+                        ? t("git.historyPushDialogPreviewNoOutgoingDisableHint")
+                        : undefined
+                    }
+                    onClick={() => void handleConfirmPush()}
+                  >
+                    {pushSubmitting ? t("common.loading") : t("git.push")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {resetDialogOpen && resetTargetCommit ? (
+          <div
+            className="git-history-create-branch-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !operationLoading) {
+                setResetDialogOpen(false);
+              }
+            }}
+          >
+            <div
+              className="git-history-reset-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("git.historyResetDialogTitle")}
+            >
+              <div className="git-history-create-branch-title">
+                {t("git.historyResetDialogTitle")}
+              </div>
+              <div className="git-history-reset-target">
+                {t("git.historyResetDialogTarget", {
+                  branch: currentBranch ?? "HEAD",
+                  workspace: workspace.name,
+                  sha: resetTargetCommit.sha.slice(0, 10),
+                  summary: resetTargetCommit.summary,
+                  author: resetTargetCommit.author,
+                })}
+              </div>
+              <div className="git-history-reset-description">
+                {t("git.historyResetDialogDescription")}
+              </div>
+              <div className="git-history-reset-mode-list" role="radiogroup">
+                {([
+                  ["soft", "historyResetModeSoft", "historyResetModeSoftDesc"],
+                  ["mixed", "historyResetModeMixed", "historyResetModeMixedDesc"],
+                  ["hard", "historyResetModeHard", "historyResetModeHardDesc"],
+                  ["keep", "historyResetModeKeep", "historyResetModeKeepDesc"],
+                ] as const).map(([mode, labelKey, descKey]) => (
+                  <label key={mode} className="git-history-reset-mode-item">
+                    <input
+                      type="radio"
+                      name="git-history-reset-mode"
+                      checked={resetMode === mode}
+                      onChange={() => setResetMode(mode)}
+                    />
+                    <div className="git-history-reset-mode-copy">
+                      <div className="git-history-reset-mode-label">{t(`git.${labelKey}`)}</div>
+                      <div className="git-history-reset-mode-desc">{t(`git.${descKey}`)}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {resetMode === "hard" ? (
+                <div className="git-history-warning">{t("git.historyResetHardWarning")}</div>
+              ) : null}
+              <div className="git-history-create-branch-actions">
+                <button
+                  type="button"
+                  className="git-history-create-branch-btn is-cancel"
+                  onClick={() => setResetDialogOpen(false)}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="git-history-create-branch-btn is-confirm"
+                  disabled={!resetTargetSha || Boolean(operationLoading)}
+                  onClick={() => void handleConfirmResetCommit()}
+                >
+                  {operationLoading === "reset" ? t("common.loading") : t("common.confirm")}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
