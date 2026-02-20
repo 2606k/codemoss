@@ -28,6 +28,10 @@ type GitDiffViewerProps = {
   workspaceId?: string | null;
   diffs: GitDiffViewerItem[];
   listView?: "flat" | "tree";
+  stickyHeaderMode?: "full" | "controls-only";
+  showContentModeControls?: boolean;
+  fullDiffLoader?: ((path: string) => Promise<string>) | null;
+  fullDiffSourceKey?: string | null;
   selectedPath: string | null;
   scrollRequestId?: number;
   isLoading: boolean;
@@ -373,6 +377,10 @@ export function GitDiffViewer({
   workspaceId = null,
   diffs,
   listView = "flat",
+  stickyHeaderMode = "full",
+  showContentModeControls,
+  fullDiffLoader = null,
+  fullDiffSourceKey = null,
   selectedPath,
   scrollRequestId,
   isLoading,
@@ -416,6 +424,7 @@ export function GitDiffViewer({
     }
     return diffs.filter((entry) => entry.path === selectedPath);
   }, [diffs, listView, selectedPath]);
+  const shouldShowContentModeControls = showContentModeControls ?? listView === "tree";
   const indexByPath = useMemo(() => {
     const map = new Map<string, number>();
     effectiveDiffs.forEach((entry, index) => {
@@ -627,10 +636,20 @@ export function GitDiffViewer({
     setFullDiffByPath({});
     setLoadingFullDiffByPath({});
     setFullDiffErrorByPath({});
-  }, [workspaceId]);
+  }, [workspaceId, fullDiffSourceKey]);
+
+  const loadFullDiff = useCallback((path: string) => {
+    if (fullDiffLoader) {
+      return fullDiffLoader(path);
+    }
+    if (!workspaceId) {
+      return Promise.resolve("");
+    }
+    return getGitFileFullDiff(workspaceId, path);
+  }, [fullDiffLoader, workspaceId]);
 
   const fullDiffTargetPath = useMemo(() => {
-    if (listView !== "tree") {
+    if (!shouldShowContentModeControls) {
       return null;
     }
     const path = stickyEntry?.path ?? selectedPath;
@@ -638,7 +657,7 @@ export function GitDiffViewer({
       return null;
     }
     return (fileContentModes[path] ?? "focused") === "all" ? path : null;
-  }, [fileContentModes, listView, selectedPath, stickyEntry?.path]);
+  }, [fileContentModes, selectedPath, shouldShowContentModeControls, stickyEntry?.path]);
 
   const collectChangeAnchors = useCallback((path: string) => {
     const row = rowNodesByPathRef.current.get(path);
@@ -761,12 +780,15 @@ export function GitDiffViewer({
   }, [anchorIndexByPath, collectChangeAnchors, stickyEntry]);
 
   useEffect(() => {
-    if (!workspaceId || !fullDiffTargetPath) {
+    if (!fullDiffTargetPath) {
+      return;
+    }
+    if (!fullDiffLoader && !workspaceId) {
       return;
     }
     let cancelled = false;
     setLoadingFullDiffByPath((prev) => ({ ...prev, [fullDiffTargetPath]: true }));
-    void getGitFileFullDiff(workspaceId, fullDiffTargetPath)
+    void loadFullDiff(fullDiffTargetPath)
       .then((diffText) => {
         if (cancelled) {
           return;
@@ -798,7 +820,7 @@ export function GitDiffViewer({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, fullDiffTargetPath]);
+  }, [fullDiffLoader, fullDiffTargetPath, loadFullDiff, workspaceId]);
 
   return (
     <WorkerPoolContextProvider
@@ -820,73 +842,79 @@ export function GitDiffViewer({
         {!error && stickyEntry && (
           <div className="diff-viewer-sticky">
             <div className="diff-viewer-header diff-viewer-header-sticky">
-              <span
-                className="diff-viewer-status"
-                data-status={stickyEntry.status}
-              >
-                {stickyEntry.status}
-              </span>
-              <span className="diff-viewer-path">{stickyEntry.path}</span>
-              <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffView")}>
-                <button
-                  type="button"
-                  className={`diff-viewer-header-mode-icon-button ${diffStyle === "split" ? "active" : ""}`}
-                  onClick={() => onDiffStyleChange?.("split")}
-                  aria-label={t("git.dualPanelDiff")}
-                >
-                  <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-split" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className={`diff-viewer-header-mode-icon-button ${diffStyle === "unified" ? "active" : ""}`}
-                  onClick={() => onDiffStyleChange?.("unified")}
-                  aria-label={t("git.singleColumnDiff")}
-                >
-                  <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-unified" aria-hidden />
-                </button>
-              </div>
-              {listView === "tree" && (
+              {stickyHeaderMode !== "controls-only" ? (
                 <>
-                  <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffContentMode")}>
-                    {(() => {
-                      const activePath = stickyEntry.path;
-                      const isAll = (fileContentModes[activePath] ?? "focused") === "all";
-                      const isLoadingFull = Boolean(loadingFullDiffByPath[activePath]);
-                      const hasFullDiff = Boolean(fullDiffByPath[activePath]?.trim());
-                      const hasError = Boolean(fullDiffErrorByPath[activePath]);
-                      const allLabel = isAll
-                        ? `${t("git.viewAllContent")} (${hasError ? "ERR" : isLoadingFull ? "..." : hasFullDiff ? "FULL" : "EMPTY"})`
-                        : t("git.viewAllContent");
-                      return (
-                    <button
-                      type="button"
-                      className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "all" ? "active" : ""}`}
-                      onClick={() => handleFileContentModeChange(stickyEntry.path, "all")}
-                      title={hasError ? fullDiffErrorByPath[activePath] : "Full diff status"}
-                    >
-                      {allLabel}
-                    </button>
-                      );
-                    })()}
-                    <button
-                      type="button"
-                      className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "focused" ? "active" : ""}`}
-                      onClick={() => handleFileContentModeChange(stickyEntry.path, "focused")}
-                    >
-                      {t("git.viewFocusedContent")}
-                    </button>
-                  </div>
-                  <div className="diff-viewer-header-mode" role="group" aria-label={t("git.fileContentMode")}>
-                    <button
-                      type="button"
-                      className="diff-viewer-header-mode-button"
-                      onClick={() => onOpenFile?.(stickyEntry.path)}
-                    >
-                      {t("git.openFileFullText")}
-                    </button>
-                  </div>
+                  <span
+                    className="diff-viewer-status"
+                    data-status={stickyEntry.status}
+                  >
+                    {stickyEntry.status}
+                  </span>
+                  <span className="diff-viewer-path">{stickyEntry.path}</span>
                 </>
-              )}
+              ) : null}
+              <div className="diff-viewer-header-controls">
+                <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffView")}>
+                  <button
+                    type="button"
+                    className={`diff-viewer-header-mode-icon-button ${diffStyle === "split" ? "active" : ""}`}
+                    onClick={() => onDiffStyleChange?.("split")}
+                    aria-label={t("git.dualPanelDiff")}
+                  >
+                    <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-split" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className={`diff-viewer-header-mode-icon-button ${diffStyle === "unified" ? "active" : ""}`}
+                    onClick={() => onDiffStyleChange?.("unified")}
+                    aria-label={t("git.singleColumnDiff")}
+                  >
+                    <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-unified" aria-hidden />
+                  </button>
+                </div>
+                {shouldShowContentModeControls && (
+                  <>
+                    <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffContentMode")}>
+                      {(() => {
+                        const activePath = stickyEntry.path;
+                        const isAll = (fileContentModes[activePath] ?? "focused") === "all";
+                        const isLoadingFull = Boolean(loadingFullDiffByPath[activePath]);
+                        const hasFullDiff = Boolean(fullDiffByPath[activePath]?.trim());
+                        const hasError = Boolean(fullDiffErrorByPath[activePath]);
+                        const allLabel = isAll
+                          ? `${t("git.viewAllContent")} (${hasError ? "ERR" : isLoadingFull ? "..." : hasFullDiff ? "FULL" : "EMPTY"})`
+                          : t("git.viewAllContent");
+                        return (
+                          <button
+                            type="button"
+                            className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "all" ? "active" : ""}`}
+                            onClick={() => handleFileContentModeChange(stickyEntry.path, "all")}
+                            title={hasError ? fullDiffErrorByPath[activePath] : "Full diff status"}
+                          >
+                            {allLabel}
+                          </button>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "focused" ? "active" : ""}`}
+                        onClick={() => handleFileContentModeChange(stickyEntry.path, "focused")}
+                      >
+                        {t("git.viewFocusedContent")}
+                      </button>
+                    </div>
+                    <div className="diff-viewer-header-mode" role="group" aria-label={t("git.fileContentMode")}>
+                      <button
+                        type="button"
+                        className="diff-viewer-header-mode-button"
+                        onClick={() => onOpenFile?.(stickyEntry.path)}
+                      >
+                        {t("git.openFileFullText")}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

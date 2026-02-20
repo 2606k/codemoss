@@ -45,6 +45,7 @@ import type {
   GitBranchListItem,
   GitCommitDetails,
   GitCommitFileChange,
+  GitFileDiff,
   GitHistoryCommit,
   WorkspaceInfo,
 } from "../../../types";
@@ -55,6 +56,9 @@ import {
   createGitBranchFromCommit,
   deleteGitBranch,
   fetchGit,
+  getGitCommitDiff,
+  getGitDiffs,
+  getGitFileFullDiff,
   getGitStatus,
   getGitCommitDetails,
   getGitCommitHistory,
@@ -70,6 +74,7 @@ import {
   syncGit,
 } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import FileIcon from "../../../components/FileIcon";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 import { isWorkingTreeDirtyBlockingError, localizeGitErrorMessage } from "../gitErrorI18n";
@@ -184,6 +189,12 @@ type PushTargetBranchGroup = {
   items: string[];
 };
 
+type WorktreePreviewFile = GitFileDiff & {
+  status: string;
+  additions: number;
+  deletions: number;
+};
+
 const PAGE_SIZE = 100;
 const DEFAULT_DETAILS_SPLIT = 42;
 const DETAILS_SPLIT_MIN = 24;
@@ -217,6 +228,25 @@ function clamp(value: number, min: number, max: number): number {
     return min;
   }
   return Math.max(min, Math.min(max, value));
+}
+
+function extractCommitBody(summary: string, message: string): string {
+  const normalizedSummary = summary.trim();
+  const normalizedMessage = message.replace(/\r\n/g, "\n").trim();
+  if (!normalizedMessage) {
+    return "";
+  }
+  if (!normalizedSummary) {
+    return normalizedMessage;
+  }
+  if (normalizedMessage === normalizedSummary) {
+    return "";
+  }
+  const messageLines = normalizedMessage.split("\n");
+  if (messageLines[0]?.trim() !== normalizedSummary) {
+    return normalizedMessage;
+  }
+  return messageLines.slice(1).join("\n").trim();
 }
 
 function getCommitActionIcon(actionId: CommitActionId, size: number): ReactNode {
@@ -784,6 +814,7 @@ export function GitHistoryPanel({
   const commitListRef = useRef<HTMLDivElement | null>(null);
   const historySnapshotIdRef = useRef<string | null>(null);
   const createBranchNameInputRef = useRef<HTMLInputElement | null>(null);
+  const commitFullDiffCacheRef = useRef(new Map<string, Map<string, string>>());
   const initialColumnWidths = useMemo(
     () =>
       getDefaultColumnWidths(
@@ -827,6 +858,9 @@ export function GitHistoryPanel({
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [selectedFileKey, setSelectedFileKey] = useState<string | null>(null);
   const [previewFileKey, setPreviewFileKey] = useState<string | null>(null);
+  const [worktreePreviewFile, setWorktreePreviewFile] = useState<WorktreePreviewFile | null>(null);
+  const [worktreePreviewLoading, setWorktreePreviewLoading] = useState(false);
+  const [worktreePreviewError, setWorktreePreviewError] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   const [detailsSplitRatio, setDetailsSplitRatio] = useState(() =>
@@ -1167,6 +1201,10 @@ export function GitHistoryPanel({
   ]);
 
   useEffect(() => {
+    commitFullDiffCacheRef.current.clear();
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (!workspaceId) {
       return;
     }
@@ -1335,6 +1373,14 @@ export function GitHistoryPanel({
     return buildFileTreeItems(details.files, expandedDirs);
   }, [details, expandedDirs]);
 
+  const detailsMessageContent = useMemo(() => {
+    if (!details) {
+      return "";
+    }
+    const commitBody = extractCommitBody(details.summary, details.message);
+    return commitBody || t("git.historyCommitMetaNoContent");
+  }, [details, t]);
+
   const previewDetailFile = useMemo(() => {
     if (!details || !previewFileKey) {
       return null;
@@ -1368,6 +1414,38 @@ export function GitHistoryPanel({
       },
     ];
   }, [previewDetailFile]);
+
+  const worktreePreviewDiffText = useMemo(() => {
+    if (!worktreePreviewFile) {
+      return null;
+    }
+    if (worktreePreviewFile.isBinary) {
+      return t("git.historyBinaryDiffUnavailable");
+    }
+    const diffText = (worktreePreviewFile.diff ?? "").trimEnd();
+    if (!diffText.trim()) {
+      return t("git.historyEmptyDiff");
+    }
+    return diffText;
+  }, [worktreePreviewFile, t]);
+
+  const worktreePreviewDiffEntries = useMemo(() => {
+    if (!worktreePreviewFile) {
+      return [];
+    }
+    return [
+      {
+        path: worktreePreviewFile.path,
+        status: worktreePreviewFile.status,
+        diff: worktreePreviewFile.diff ?? "",
+        isImage: worktreePreviewFile.isImage,
+        oldImageData: worktreePreviewFile.oldImageData,
+        newImageData: worktreePreviewFile.newImageData,
+        oldImageMime: worktreePreviewFile.oldImageMime,
+        newImageMime: worktreePreviewFile.newImageMime,
+      },
+    ];
+  }, [worktreePreviewFile]);
 
   const pushPreviewFileTreeItems = useMemo(() => {
     if (!pushPreviewDetails) {
@@ -1412,6 +1490,65 @@ export function GitHistoryPanel({
     ];
   }, [pushPreviewModalFile]);
 
+  const loadCommitFileFullDiff = useCallback(
+    async (commitSha: string, path: string): Promise<string> => {
+      if (!workspaceId) {
+        return "";
+      }
+      const normalizedPath = path.replace(/^(?:a|b)\//, "");
+      const cachePathKey = `full_ctx200k:${normalizedPath}`;
+      const cachedByPath = commitFullDiffCacheRef.current.get(commitSha);
+      if (cachedByPath && cachedByPath.has(cachePathKey)) {
+        return cachedByPath.get(cachePathKey) ?? "";
+      }
+
+      const commitDiffs = await getGitCommitDiff(workspaceId, commitSha, {
+        path: normalizedPath,
+        contextLines: 200_000,
+      });
+      const fullDiff =
+        commitDiffs.find((entry) => entry.path === normalizedPath)?.diff
+        ?? commitDiffs[0]?.diff
+        ?? "";
+
+      const nextCache = cachedByPath ? new Map(cachedByPath) : new Map<string, string>();
+      nextCache.set(cachePathKey, fullDiff);
+      commitFullDiffCacheRef.current.set(commitSha, nextCache);
+      return fullDiff;
+    },
+    [workspaceId],
+  );
+
+  const previewModalFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!selectedCommitSha) {
+        return Promise.resolve("");
+      }
+      return loadCommitFileFullDiff(selectedCommitSha, path);
+    },
+    [loadCommitFileFullDiff, selectedCommitSha],
+  );
+
+  const pushPreviewModalFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!pushPreviewSelectedSha) {
+        return Promise.resolve("");
+      }
+      return loadCommitFileFullDiff(pushPreviewSelectedSha, path);
+    },
+    [loadCommitFileFullDiff, pushPreviewSelectedSha],
+  );
+
+  const worktreePreviewFullDiffLoader = useCallback(
+    (path: string) => {
+      if (!workspaceId) {
+        return Promise.resolve("");
+      }
+      return getGitFileFullDiff(workspaceId, path.replace(/^(?:a|b)\//, ""));
+    },
+    [workspaceId],
+  );
+
   useEffect(() => {
     if (!previewFileKey) {
       return;
@@ -1441,6 +1578,23 @@ export function GitHistoryPanel({
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
   }, [pushPreviewModalFileKey]);
+
+  useEffect(() => {
+    if (!worktreePreviewFile) {
+      return;
+    }
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWorktreePreviewFile(null);
+        setWorktreePreviewError(null);
+        setWorktreePreviewLoading(false);
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [worktreePreviewFile]);
 
   useEffect(() => {
     if (!commitContextMenu) {
@@ -2561,6 +2715,65 @@ export function GitHistoryPanel({
     });
   }, []);
 
+  const closeWorktreePreview = useCallback(() => {
+    setWorktreePreviewFile(null);
+    setWorktreePreviewError(null);
+    setWorktreePreviewLoading(false);
+  }, []);
+
+  const handleOpenWorktreePreview = useCallback(
+    async (path: string) => {
+      if (!workspaceId) {
+        onOpenDiffPath?.(path);
+        return;
+      }
+      setWorktreePreviewError(null);
+      setWorktreePreviewLoading(true);
+      setWorktreePreviewFile((current) =>
+        current && current.path === path
+          ? current
+          : {
+              path,
+              status: "M",
+              additions: 0,
+              deletions: 0,
+              diff: "",
+            },
+      );
+      try {
+        const [statusResponse, diffEntries] = await Promise.all([
+          getGitStatus(workspaceId),
+          getGitDiffs(workspaceId),
+        ]);
+        const statusFile =
+          statusResponse.files.find((entry) => entry.path === path)
+          ?? statusResponse.unstagedFiles.find((entry) => entry.path === path)
+          ?? statusResponse.stagedFiles.find((entry) => entry.path === path);
+        const diffEntry = diffEntries.find((entry) => entry.path === path);
+        setWorktreePreviewFile({
+          path,
+          status: statusFile?.status ?? "M",
+          additions: statusFile?.additions ?? 0,
+          deletions: statusFile?.deletions ?? 0,
+          diff: diffEntry?.diff ?? "",
+          isBinary: diffEntry?.isBinary,
+          isImage: diffEntry?.isImage,
+          oldImageData: diffEntry?.oldImageData ?? null,
+          newImageData: diffEntry?.newImageData ?? null,
+          oldImageMime: diffEntry?.oldImageMime ?? null,
+          newImageMime: diffEntry?.newImageMime ?? null,
+        });
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        setWorktreePreviewError(rawMessage);
+        onOpenDiffPath?.(path);
+      } finally {
+        setWorktreePreviewLoading(false);
+      }
+    },
+    [onOpenDiffPath, workspaceId],
+  );
+
   const resetTargetCommit = useMemo(() => {
     if (!resetTargetSha) {
       return null;
@@ -2647,11 +2860,6 @@ export function GitHistoryPanel({
       ];
     },
     [operationLoading, t],
-  );
-
-  const selectedCommitActions = useMemo(
-    () => buildCommitActions(selectedCommitSha),
-    [buildCommitActions, selectedCommitSha],
   );
 
   const contextCommitActions = useMemo(
@@ -3292,7 +3500,9 @@ export function GitHistoryPanel({
             listView={overviewListView}
             onMutated={() => refreshAll()}
             onSummaryChange={handleWorktreeSummaryChange}
-            onOpenDiffPath={onOpenDiffPath}
+            onOpenDiffPath={(path) => {
+              void handleOpenWorktreePreview(path);
+            }}
           />
         </aside>
 
@@ -3631,28 +3841,9 @@ export function GitHistoryPanel({
 
         <section className="git-history-details">
           <div className="git-history-column-header">
-            <span>{t("git.historyCommitDetails")}</span>
-            <div className="git-history-detail-actions">
-              {selectedCommitActions
-                .filter((action) => action.id === "cherryPick" || action.id === "revert")
-                .map((action) => (
-                  <ActionSurface
-                    key={action.id}
-                    className="git-history-mini-chip"
-                    disabled={action.disabled || DISABLE_HISTORY_ACTION_BUTTONS}
-                    onActivate={() => runCommitAction(action.id, selectedCommitSha)}
-                    title={action.disabledReason ?? action.label}
-                    ariaLabel={action.label}
-                  >
-                    <span className="git-history-commit-action-label">
-                      <span className="git-history-commit-action-icon" aria-hidden>
-                        {getCommitActionIcon(action.id, 12)}
-                      </span>
-                      <span className="git-history-commit-action-text">{action.label}</span>
-                    </span>
-                  </ActionSurface>
-                ))}
-            </div>
+            <span>
+              <FileText size={14} /> {t("git.historyCommitDetails")}
+            </span>
           </div>
 
           {detailsError && (
@@ -3669,26 +3860,6 @@ export function GitHistoryPanel({
 
           {details && (
             <>
-              <div className="git-history-metadata">
-                <div>
-                  <strong>{details.summary || t("git.historyNoMessage")}</strong>
-                </div>
-                <div className="git-history-metadata-row">
-                  <code>{details.sha}</code>
-                  <span>{details.author}</span>
-                  <time>{new Date(details.commitTime * 1000).toLocaleString()}</time>
-                </div>
-                <div className="git-history-metadata-row">
-                  <span>
-                    {t("git.historyChangedFilesSummary", {
-                      count: details.files.length,
-                      additions: details.totalAdditions,
-                      deletions: details.totalDeletions,
-                    })}
-                  </span>
-                </div>
-              </div>
-
               <div
                 className="git-history-details-body"
                 ref={detailsBodyRef}
@@ -3698,8 +3869,17 @@ export function GitHistoryPanel({
               >
                 <div className="git-history-file-list">
                   <div className="git-history-file-tree-head">
-                    <FolderTree size={13} />
-                    <span>{t("git.historyChangedFiles")}</span>
+                    <span className="git-history-file-tree-head-title">
+                      <FolderTree size={13} />
+                      <span>{t("git.historyChangedFiles")}</span>
+                    </span>
+                    <span className="git-history-file-tree-head-summary">
+                      {t("git.historyChangedFilesSummary", {
+                        count: details.files.length,
+                        additions: details.totalAdditions,
+                        deletions: details.totalDeletions,
+                      })}
+                    </span>
                   </div>
 
                   {!fileTreeItems.length && (
@@ -3719,6 +3899,9 @@ export function GitHistoryPanel({
                         >
                           <span className="git-history-tree-caret" aria-hidden>
                             {item.expanded ? "▾" : "▸"}
+                          </span>
+                          <span className="git-history-tree-icon" aria-hidden>
+                            <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
                           </span>
                           <span className="git-history-tree-label">{item.label}</span>
                         </ActionSurface>
@@ -3745,9 +3928,14 @@ export function GitHistoryPanel({
                         >
                           {file.status}
                         </span>
+                        <span className="git-history-tree-icon is-file" aria-hidden>
+                          <FileIcon filePath={file.path} />
+                        </span>
                         <span className="git-history-file-path">{item.label}</span>
                         <span className="git-history-file-stats">
-                          +{file.additions} / -{file.deletions}
+                          <span className="is-add">+{file.additions}</span>
+                          <span className="is-sep">/</span>
+                          <span className="is-del">-{file.deletions}</span>
                         </span>
                       </ActionSurface>
                     );
@@ -3764,9 +3952,34 @@ export function GitHistoryPanel({
                 />
 
                 <div className="git-history-diff-view">
-                  <pre className="git-history-diff-code">
-                    {details.message.trim() || details.summary || t("git.historyNoMessage")}
-                  </pre>
+                  <div className="git-history-message-panel">
+                    <div className="git-history-message-row">
+                      <span className="git-history-message-label">{t("git.historyCommitMetaTitleLabel")}</span>
+                      <strong className="git-history-message-title">
+                        {details.summary || t("git.historyNoMessage")}
+                      </strong>
+                    </div>
+                    <div className="git-history-message-row">
+                      <span className="git-history-message-label">{t("git.historyCommitMetaContentLabel")}</span>
+                      <div className="git-history-message-content">
+                        {detailsMessageContent}
+                      </div>
+                    </div>
+                    <div className="git-history-message-meta-row">
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaAuthorLabel")}</i>
+                        <span>{details.author || t("git.unknown")}</span>
+                      </span>
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaTimeLabel")}</i>
+                        <time>{new Date(details.commitTime * 1000).toLocaleString()}</time>
+                      </span>
+                      <span className="git-history-message-meta-item">
+                        <i>{t("git.historyCommitMetaIdLabel")}</i>
+                        <code>{details.sha}</code>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3790,9 +4003,14 @@ export function GitHistoryPanel({
                         >
                           {previewDetailFile.status}
                         </span>
-                        <span>{previewDetailFile.path}</span>
+                        <span className="git-history-tree-icon is-file" aria-hidden>
+                          <FileIcon filePath={previewDetailFile.path} />
+                        </span>
+                        <span className="git-history-diff-modal-path">{previewDetailFile.path}</span>
                         <span className="git-history-diff-modal-stats">
-                          +{previewDetailFile.additions} / -{previewDetailFile.deletions}
+                          <span className="is-add">+{previewDetailFile.additions}</span>
+                          <span className="is-sep">/</span>
+                          <span className="is-del">-{previewDetailFile.deletions}</span>
                         </span>
                       </div>
                       <button
@@ -3826,6 +4044,10 @@ export function GitHistoryPanel({
                           isLoading={false}
                           error={null}
                           listView="flat"
+                          stickyHeaderMode="controls-only"
+                          showContentModeControls
+                          fullDiffLoader={previewModalFullDiffLoader}
+                          fullDiffSourceKey={selectedCommitSha}
                           diffStyle={diffViewMode}
                           onDiffStyleChange={setDiffViewMode}
                         />
@@ -3837,6 +4059,76 @@ export function GitHistoryPanel({
             </>
           )}
         </section>
+        {worktreePreviewFile && (
+          <div
+            className="git-history-diff-modal-overlay"
+            role="presentation"
+            onClick={closeWorktreePreview}
+          >
+            <div
+              className="git-history-diff-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={worktreePreviewFile.path}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="git-history-diff-modal-header">
+                <div className="git-history-diff-modal-title">
+                  <span className={`git-history-file-status git-status-${worktreePreviewFile.status.toLowerCase()}`}>
+                    {worktreePreviewFile.status}
+                  </span>
+                  <span className="git-history-tree-icon is-file" aria-hidden>
+                    <FileIcon filePath={worktreePreviewFile.path} />
+                  </span>
+                  <span className="git-history-diff-modal-path">{worktreePreviewFile.path}</span>
+                  <span className="git-history-diff-modal-stats">
+                    <span className="is-add">+{worktreePreviewFile.additions}</span>
+                    <span className="is-sep">/</span>
+                    <span className="is-del">-{worktreePreviewFile.deletions}</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="git-history-diff-modal-close"
+                  onClick={closeWorktreePreview}
+                  aria-label={t("common.close")}
+                  title={t("common.close")}
+                >
+                  <span className="git-history-diff-modal-close-glyph" aria-hidden>
+                    ×
+                  </span>
+                </button>
+              </div>
+              {worktreePreviewError ? (
+                <div className="git-history-error">
+                  {localizeKnownGitError(worktreePreviewError) ?? worktreePreviewError}
+                </div>
+              ) : null}
+              {worktreePreviewLoading ? (
+                <div className="git-history-empty">{t("common.loading")}</div>
+              ) : worktreePreviewFile.isBinary || !(worktreePreviewFile.diff ?? "").trim() ? (
+                <pre className="git-history-diff-modal-code">{worktreePreviewDiffText}</pre>
+              ) : (
+                <div className="git-history-diff-modal-viewer">
+                  <GitDiffViewer
+                    workspaceId={workspaceId}
+                    diffs={worktreePreviewDiffEntries}
+                    selectedPath={worktreePreviewFile.path}
+                    isLoading={false}
+                    error={null}
+                    listView="flat"
+                    stickyHeaderMode="controls-only"
+                    showContentModeControls
+                    fullDiffLoader={worktreePreviewFullDiffLoader}
+                    fullDiffSourceKey={worktreePreviewFile.path}
+                    diffStyle={diffViewMode}
+                    onDiffStyleChange={setDiffViewMode}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         </div>
         {commitContextMenu ? (
           <div
@@ -4076,6 +4368,9 @@ export function GitHistoryPanel({
                                       <span className="git-history-tree-caret" aria-hidden>
                                         {item.expanded ? "▾" : "▸"}
                                       </span>
+                                      <span className="git-history-tree-icon" aria-hidden>
+                                        <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
+                                      </span>
                                       <span className="git-history-tree-label">{item.label}</span>
                                     </ActionSurface>
                                   );
@@ -4100,9 +4395,14 @@ export function GitHistoryPanel({
                                     >
                                       {file.status}
                                     </span>
+                                    <span className="git-history-tree-icon is-file" aria-hidden>
+                                      <FileIcon filePath={file.path} />
+                                    </span>
                                     <span className="git-history-file-path">{item.label}</span>
                                     <span className="git-history-file-stats">
-                                      +{file.additions} / -{file.deletions}
+                                      <span className="is-add">+{file.additions}</span>
+                                      <span className="is-sep">/</span>
+                                      <span className="is-del">-{file.deletions}</span>
                                     </span>
                                   </ActionSurface>
                                 );
@@ -4174,9 +4474,14 @@ export function GitHistoryPanel({
                             >
                               {pushPreviewModalFile.status}
                             </span>
-                            <span>{pushPreviewModalFile.path}</span>
+                            <span className="git-history-tree-icon is-file" aria-hidden>
+                              <FileIcon filePath={pushPreviewModalFile.path} />
+                            </span>
+                            <span className="git-history-diff-modal-path">{pushPreviewModalFile.path}</span>
                             <span className="git-history-diff-modal-stats">
-                              +{pushPreviewModalFile.additions} / -{pushPreviewModalFile.deletions}
+                              <span className="is-add">+{pushPreviewModalFile.additions}</span>
+                              <span className="is-sep">/</span>
+                              <span className="is-del">-{pushPreviewModalFile.deletions}</span>
                             </span>
                           </div>
                           <button
@@ -4210,6 +4515,10 @@ export function GitHistoryPanel({
                               isLoading={false}
                               error={null}
                               listView="flat"
+                              stickyHeaderMode="controls-only"
+                              showContentModeControls
+                              fullDiffLoader={pushPreviewModalFullDiffLoader}
+                              fullDiffSourceKey={pushPreviewSelectedSha}
                               diffStyle={diffViewMode}
                               onDiffStyleChange={setDiffViewMode}
                             />

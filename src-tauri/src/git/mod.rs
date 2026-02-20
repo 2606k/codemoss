@@ -1830,6 +1830,8 @@ pub(crate) async fn get_git_commit_details(
 pub(crate) async fn get_git_commit_diff(
     workspace_id: String,
     sha: String,
+    path: Option<String>,
+    context_lines: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitCommitDiff>, String> {
     let workspaces = state.workspaces.lock().await;
@@ -1846,6 +1848,14 @@ pub(crate) async fn get_git_commit_diff(
     let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
 
     let mut options = DiffOptions::new();
+    let context = context_lines.unwrap_or(3).min(200_000) as u32;
+    options.context_lines(context).interhunk_lines(context);
+    if let Some(path_filter) = trim_optional(path) {
+        let normalized_path = normalize_git_path(&path_filter);
+        if !normalized_path.is_empty() {
+            options.pathspec(normalized_path);
+        }
+    }
     let diff = repo
         .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))
         .map_err(|e| e.to_string())?;

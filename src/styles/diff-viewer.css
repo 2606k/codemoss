@@ -318,8 +318,16 @@
   white-space: nowrap;
 }
 
-.diff-viewer-header-mode {
+.diff-viewer-header-controls {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.diff-viewer-header-mode {
   display: inline-flex;
   align-items: center;
   gap: 2px;

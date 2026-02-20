@@ -1049,6 +1049,13 @@ button.git-history-overview-list-chip {
   font-weight: 600;
 }
 
+.git-history-branches .git-history-column-header,
+.git-history-commits .git-history-column-header,
+.git-history-details .git-history-column-header {
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
 .git-history-branch-actions,
 .git-history-detail-actions {
   display: inline-flex;
@@ -1535,18 +1542,30 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-file-tree-head {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
   padding: 7px 10px;
   font-size: 11px;
   color: var(--text-muted);
   border-bottom: 1px solid color-mix(in srgb, var(--border-default) 45%, transparent);
 }
 
+.git-history-file-tree-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.git-history-file-tree-head-summary {
+  white-space: nowrap;
+}
+
 .git-history-tree-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   padding: 6px 10px;
@@ -1555,7 +1574,7 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-tree-dir {
-  grid-template-columns: 12px minmax(0, 1fr);
+  grid-template-columns: 12px auto minmax(0, 1fr);
   font-size: 11px;
   color: var(--text-secondary);
 }
@@ -1564,6 +1583,17 @@ button.git-history-overview-list-chip {
   color: var(--text-muted);
   font-size: 11px;
   text-align: center;
+}
+
+.git-history-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text-muted) 86%, transparent);
+}
+
+.git-history-tree-icon.is-file {
+  color: color-mix(in srgb, var(--text-secondary) 84%, transparent);
 }
 
 .git-history-tree-label,
@@ -1587,9 +1617,23 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-file-stats {
-  color: var(--text-muted);
   font-size: 10px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.git-history-file-stats .is-add {
+  color: #22c55e;
+}
+
+.git-history-file-stats .is-del {
+  color: #f87171;
+}
+
+.git-history-file-stats .is-sep {
+  color: var(--text-muted);
 }
 
 .git-history-details-resizer {
@@ -1627,6 +1671,63 @@ button.git-history-overview-list-chip {
   line-height: 1.45;
   white-space: pre;
   font-family: var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+}
+
+.git-history-message-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.git-history-message-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.git-history-message-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.git-history-message-title {
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--text-stronger);
+}
+
+.git-history-message-content {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.git-history-message-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.git-history-message-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.git-history-message-meta-item i {
+  font-style: normal;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+}
+
+.git-history-message-meta-item code {
+  font-size: 11px;
 }
 
 .git-history-empty {
@@ -1705,8 +1806,9 @@ button.git-history-overview-list-chip {
   color: var(--text-muted);
 }
 
-.git-history-diff-modal-title span:nth-child(2) {
+.git-history-diff-modal-path {
   min-width: 0;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1714,9 +1816,23 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-diff-modal-stats {
-  color: var(--text-muted);
   font-size: 11px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.git-history-diff-modal-stats .is-add {
+  color: #22c55e;
+}
+
+.git-history-diff-modal-stats .is-del {
+  color: #f87171;
+}
+
+.git-history-diff-modal-stats .is-sep {
+  color: var(--text-muted);
 }
 
 .git-history-diff-modal-close {
@@ -1969,6 +2085,93 @@ button.git-history-overview-list-chip {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.git-history-worktree-danger-dialog {
+  width: min(560px, 100%);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 78%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted, #111725) 92%, #0b1220);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.git-history-worktree-danger-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-history-worktree-danger-copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.git-history-worktree-danger-list {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
+  padding: 8px 10px;
+}
+
+.git-history-worktree-danger-list-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.git-history-worktree-danger-list ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.git-history-worktree-danger-list li {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.git-history-worktree-danger-file {
+  font-family: var(
+    --code-font-family,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text-secondary) 88%, transparent);
+  word-break: break-all;
+}
+
+.git-history-danger-keyword {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.git-history-worktree-danger-note {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .git-history-push-dialog {
@@ -2860,6 +3063,12 @@ button.git-history-overview-list-chip {
   background: color-mix(in srgb, var(--accent-primary, #2563eb) 28%, transparent);
   border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 52%, transparent);
   color: color-mix(in srgb, var(--accent-primary, #2563eb) 92%, #dbeafe);
+}
+
+.git-history-create-branch-btn.is-danger {
+  background: color-mix(in srgb, #ef4444 26%, transparent);
+  border-color: color-mix(in srgb, #ef4444 54%, transparent);
+  color: color-mix(in srgb, #ef4444 90%, #fee2e2);
 }
 
 .git-history-create-branch-btn:disabled {

@@ -448,8 +448,17 @@ export async function getGitCommitDetails(
 export async function getGitCommitDiff(
   workspace_id: string,
   sha: string,
+  options?: {
+    path?: string | null;
+    contextLines?: number;
+  },
 ): Promise<GitCommitDiff[]> {
-  return invoke("get_git_commit_diff", { workspaceId: workspace_id, sha });
+  return invoke("get_git_commit_diff", {
+    workspaceId: workspace_id,
+    sha,
+    path: options?.path ?? null,
+    contextLines: options?.contextLines ?? null,
+  });
 }
 
 export async function getGitRemote(workspace_id: string): Promise<string | null> {

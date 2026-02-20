@@ -234,7 +234,7 @@ describe("GitHistoryPanel helpers", () => {
 });
 
 describe("GitHistoryPanel interactions", () => {
-  it("supports select commit -> click file -> open diff modal -> cherry-pick", async () => {
+  it("supports select commit -> click file -> open diff modal", async () => {
     render(<GitHistoryPanel workspace={workspace as never} />);
 
     await waitFor(() => {
@@ -252,10 +252,35 @@ describe("GitHistoryPanel interactions", () => {
     await waitFor(() => {
       expect(screen.getByTestId("git-diff-viewer")).toBeTruthy();
     });
+  });
 
-    fireEvent.click(screen.getByText("git.historyCherryPick"));
+  it("shows no-body hint when commit message only contains summary", async () => {
+    vi.mocked(tauriService.getGitCommitDetails).mockResolvedValueOnce({
+      sha: "a".repeat(40),
+      summary: "feat: one",
+      message: "feat: one",
+      author: "tester",
+      authorEmail: "tester@example.com",
+      committer: "tester",
+      committerEmail: "tester@example.com",
+      authorTime: 1739300000,
+      commitTime: 1739300000,
+      parents: [],
+      files: [],
+      totalAdditions: 0,
+      totalDeletions: 0,
+    });
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
     await waitFor(() => {
-      expect(tauriService.cherryPickCommit).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("feat: one"));
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyCommitMetaNoContent")).toBeTruthy();
     });
   });
 
