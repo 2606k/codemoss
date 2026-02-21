@@ -20,6 +20,8 @@ import type {
   GitCommitDiff,
   GitBranchCompareCommitSets,
   GitBranchListResponse,
+  GitPrWorkflowDefaults,
+  GitPrWorkflowResult,
   GitHubIssuesResponse,
   GitHubPullRequestComment,
   GitHubPullRequestDiff,
@@ -430,6 +432,40 @@ export async function getGitPushPreview(
     remote: options.remote,
     branch: options.branch,
     limit: options.limit ?? 120,
+  });
+}
+
+export type CreateGitPrWorkflowOptions = {
+  upstreamRepo: string;
+  baseBranch: string;
+  headOwner: string;
+  headBranch: string;
+  title: string;
+  body?: string | null;
+  commentAfterCreate?: boolean;
+  commentBody?: string | null;
+};
+
+export async function getGitPrWorkflowDefaults(
+  workspaceId: string,
+): Promise<GitPrWorkflowDefaults> {
+  return invoke<GitPrWorkflowDefaults>("get_git_pr_workflow_defaults", { workspaceId });
+}
+
+export async function createGitPrWorkflow(
+  workspaceId: string,
+  options: CreateGitPrWorkflowOptions,
+): Promise<GitPrWorkflowResult> {
+  return invoke<GitPrWorkflowResult>("create_git_pr_workflow", {
+    workspaceId,
+    upstreamRepo: options.upstreamRepo,
+    baseBranch: options.baseBranch,
+    headOwner: options.headOwner,
+    headBranch: options.headBranch,
+    title: options.title,
+    body: options.body ?? null,
+    commentAfterCreate: options.commentAfterCreate ?? null,
+    commentBody: options.commentBody ?? null,
   });
 }
 
