@@ -1948,7 +1948,15 @@ function MainApp() {
         });
       }
     }
-  }, [appSettings.systemNotificationEnabled, lastAgentMessageByThread, t, threadStatusById, threadsByWorkspace, workspaces]);
+  }, [
+    appSettings.systemNotificationEnabled,
+    lastAgentMessageByThread,
+    t,
+    threadItemsByThread,
+    threadStatusById,
+    threadsByWorkspace,
+    workspaces,
+  ]);
 
   const {
     commitMessage,

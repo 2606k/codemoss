@@ -3092,7 +3092,7 @@ export function GitHistoryPanel({
         ),
       },
     ];
-  }, [groupedWorkspaces, projectOptions]);
+  }, [groupedWorkspaces, projectOptions, workspaces]);
   const shouldShowWorkspacePickerPage = !workspace || repositoryUnavailable;
   const workspacePickerMessage = repositoryUnavailable
     ? t("git.historySelectGitWorkspace")

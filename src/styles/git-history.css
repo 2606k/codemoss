@@ -3420,11 +3420,6 @@ button.git-history-overview-list-chip {
   background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 88%, transparent);
 }
 
-.git-history-create-pr-preview-error {
-  font-size: 12px;
-  color: color-mix(in srgb, #991b1b 72%, var(--text-primary));
-}
-
 .git-history-create-pr-preview-hint {
   font-size: 11px;
   color: var(--text-muted);
@@ -3442,27 +3437,6 @@ button.git-history-overview-list-chip {
   white-space: pre-wrap;
   overflow: auto;
   max-height: 120px;
-}
-
-.git-history-create-pr-preview-inline-diff {
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
-  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 90%, transparent);
-  overflow: hidden;
-}
-
-.git-history-create-pr-preview-inline-diff-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 52%, transparent);
-}
-
-.git-history-create-pr-preview-inline-diff .git-history-diff-modal-code {
-  max-height: 220px;
-  margin: 0;
 }
 
 .git-history-create-pr-stage-card {

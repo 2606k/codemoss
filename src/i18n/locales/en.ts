@@ -982,7 +982,6 @@ const en = {
     historyCreatePrResultSuccess: "PR created successfully",
     historyCreatePrResultExisting: "Existing PR reused",
     historyCreatePrResultFailed: "PR workflow failed",
-    historyCreatePrOpenLink: "Open PR",
     historyCreatePrCopyLink: "Copy link",
     historyCreatePrCopyCommand: "Copy command",
     historyCreatePrRetryCommand: "Retry command",

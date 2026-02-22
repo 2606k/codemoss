@@ -975,7 +975,6 @@ const zh = {
     historyCreatePrResultSuccess: "PR 创建成功",
     historyCreatePrResultExisting: "已存在同分支 PR",
     historyCreatePrResultFailed: "PR 创建失败",
-    historyCreatePrOpenLink: "打开 PR",
     historyCreatePrCopyLink: "复制链接",
     historyCreatePrCopyCommand: "复制命令",
     historyCreatePrRetryCommand: "重试命令",
