@@ -1190,13 +1190,18 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-chip-pr {
-  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 34%, transparent);
-  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
-  color: color-mix(in srgb, var(--accent-primary, #2563eb) 82%, var(--text-primary));
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 80%, var(--text-secondary));
 }
 
 .git-history-chip-pr:hover {
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 88%, var(--text-primary));
   background: color-mix(in srgb, var(--accent-primary, #2563eb) 20%, transparent);
+}
+
+.git-history-chip-pr.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 88%, var(--text-primary));
 }
 
 .git-history-mini-chip,

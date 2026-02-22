@@ -1106,6 +1106,10 @@ const zh = {
     historyCreateBranchDialogBusy: "正在创建分支，请稍候...",
     historyPromptBranchFromCommitName: "请输入从该提交创建的分支名",
     historyPromptRenameBranch: "请输入新的分支名称",
+    historyRenameBranchDialogTitle: "重命名分支",
+    historyRenameBranchDialogSourceLabel: "当前分支",
+    historyRenameBranchDialogNameLabel: "新分支名称",
+    historyRenameBranchDialogBusy: "正在重命名分支，请稍候...",
     historyConfirmDeleteBranch: "确认删除分支 {{branch}} 吗？",
     historyTitleDeleteBranch: "删除分支",
     historyConfirmForceDeleteBranch:

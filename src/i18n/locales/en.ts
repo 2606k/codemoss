@@ -1125,6 +1125,10 @@ const en = {
     historyCreateBranchDialogBusy: "Creating branch, please wait...",
     historyPromptBranchFromCommitName: "Branch name from selected commit",
     historyPromptRenameBranch: "Rename branch",
+    historyRenameBranchDialogTitle: "Rename Branch",
+    historyRenameBranchDialogSourceLabel: "Current branch",
+    historyRenameBranchDialogNameLabel: "New branch name",
+    historyRenameBranchDialogBusy: "Renaming branch, please wait...",
     historyConfirmDeleteBranch: "Delete branch {{branch}}?",
     historyTitleDeleteBranch: "Delete branch",
     historyConfirmForceDeleteBranch:

@@ -302,7 +302,6 @@ const COMMITS_MIN_WIDTH = 260;
 const DETAILS_MIN_WIDTH = 260;
 const DISABLE_HISTORY_ACTION_BUTTONS = false;
 const DISABLE_HISTORY_COMMIT_ACTIONS = false;
-const DISABLE_HISTORY_BRANCH_RENAME = true;
 const COMMIT_ROW_ESTIMATED_HEIGHT = 56;
 const SORT_ORDER_FALLBACK = Number.MAX_SAFE_INTEGER;
 const PUSH_TARGET_MENU_MAX_HEIGHT = 220;
@@ -1228,6 +1227,7 @@ export function GitHistoryPanel({
   const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
   const historySnapshotIdRef = useRef<string | null>(null);
   const createBranchNameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameBranchNameInputRef = useRef<HTMLInputElement | null>(null);
   const commitFullDiffCacheRef = useRef(new Map<string, Map<string, string>>());
   const branchDiffCacheRef = useRef<Map<string, GitCommitDiff>>(new Map());
   const branchCompareDetailsCacheRef = useRef<Map<string, GitCommitDetails>>(new Map());
@@ -1408,6 +1408,9 @@ export function GitHistoryPanel({
   const [createBranchDialogOpen, setCreateBranchDialogOpen] = useState(false);
   const [createBranchSource, setCreateBranchSource] = useState("");
   const [createBranchName, setCreateBranchName] = useState("");
+  const [renameBranchDialogOpen, setRenameBranchDialogOpen] = useState(false);
+  const [renameBranchSource, setRenameBranchSource] = useState("");
+  const [renameBranchName, setRenameBranchName] = useState("");
   const [repositoryUnavailable, setRepositoryUnavailable] = useState(false);
   const [fallbackGitRoots, setFallbackGitRoots] = useState<string[]>([]);
   const [fallbackGitRootsLoading, setFallbackGitRootsLoading] = useState(false);
@@ -1901,6 +1904,14 @@ export function GitHistoryPanel({
   }, [createBranchDialogOpen]);
 
   useEffect(() => {
+    if (!renameBranchDialogOpen) {
+      return;
+    }
+    renameBranchNameInputRef.current?.focus();
+    renameBranchNameInputRef.current?.select();
+  }, [renameBranchDialogOpen]);
+
+  useEffect(() => {
     setBranchDiffState(null);
     branchDiffCacheRef.current.clear();
     branchCompareDetailsCacheRef.current.clear();
@@ -1912,6 +1923,12 @@ export function GitHistoryPanel({
       closeBranchContextMenu();
     }
   }, [branchContextMenu, closeBranchContextMenu, createBranchDialogOpen]);
+
+  useEffect(() => {
+    if (renameBranchDialogOpen && branchContextMenu) {
+      closeBranchContextMenu();
+    }
+  }, [branchContextMenu, closeBranchContextMenu, renameBranchDialogOpen]);
 
   useEffect(() => {
     if (!branchContextMenu) {
@@ -2619,6 +2636,15 @@ export function GitHistoryPanel({
       createBranchSource.trim() &&
       createBranchNameTrimmed,
   );
+  const renameBranchNameTrimmed = renameBranchName.trim();
+  const renameBranchSubmitting = operationLoading === "renameBranch";
+  const renameBranchCanConfirm = Boolean(
+    workspaceId &&
+      !renameBranchSubmitting &&
+      renameBranchSource.trim() &&
+      renameBranchNameTrimmed &&
+      renameBranchNameTrimmed !== renameBranchSource,
+  );
   const createPrSubmitting = operationLoading === "createPr";
   const createPrToolbarDisabledReason = !currentBranch
     ? t("git.historyCreatePrUnavailableNoBranch")
@@ -2796,6 +2822,25 @@ export function GitHistoryPanel({
     () => createPrPreviewCommits.find((entry) => entry.sha === createPrPreviewSelectedSha) ?? null,
     [createPrPreviewCommits, createPrPreviewSelectedSha],
   );
+  const selectedLocalBranchForRename = useMemo(() => {
+    const candidate = selectedBranch === "all" ? currentBranch : selectedBranch;
+    if (!candidate) {
+      return null;
+    }
+    return localBranches.some((entry) => entry.name === candidate) ? candidate : null;
+  }, [currentBranch, localBranches, selectedBranch]);
+  const renameBranchToolbarDisabledReason = useMemo(() => {
+    if (operationLoading) {
+      return t("git.historyBranchMenuUnavailableBusy");
+    }
+    if (selectedBranch !== "all" && selectedBranch && !localBranches.some((entry) => entry.name === selectedBranch)) {
+      return t("git.historyBranchMenuUnavailableRemote");
+    }
+    if (!selectedLocalBranchForRename) {
+      return t("git.historyBranchMenuUnavailableNoCurrent");
+    }
+    return null;
+  }, [localBranches, operationLoading, selectedBranch, selectedLocalBranchForRename, t]);
   const pullSubmitting = operationLoading === "pull";
   const syncSubmitting = operationLoading === "sync";
   const fetchSubmitting = operationLoading === "fetch";
@@ -4122,22 +4167,45 @@ export function GitHistoryPanel({
     workspaceId,
   ]);
 
-  const handleRenameBranch = useCallback(async (targetBranch?: string | null) => {
-    const branchName = targetBranch ?? selectedBranch;
-    if (!workspaceId || !branchName || branchName === "all") {
+  const handleOpenRenameBranchDialog = useCallback((targetBranch?: string | null) => {
+    const branchNameCandidate = targetBranch ?? (selectedBranch === "all" ? currentBranch : selectedBranch);
+    const branchName = branchNameCandidate?.trim();
+    if (!workspaceId || operationLoading || !branchName) {
       return;
     }
-    const next = window.prompt(t("git.historyPromptRenameBranch"), branchName);
-    if (!next || !next.trim() || next.trim() === branchName) {
+    if (!localBranches.some((entry) => entry.name === branchName)) {
       return;
     }
+    setRenameBranchSource(branchName);
+    setRenameBranchName(branchName);
     closeBranchContextMenu();
+    setRenameBranchDialogOpen(true);
+  }, [closeBranchContextMenu, currentBranch, localBranches, operationLoading, selectedBranch, workspaceId]);
+
+  const closeRenameBranchDialog = useCallback(() => {
+    if (renameBranchSubmitting) {
+      return;
+    }
+    setRenameBranchDialogOpen(false);
+  }, [renameBranchSubmitting]);
+
+  const handleRenameBranchConfirm = useCallback(async () => {
+    if (!workspaceId || !renameBranchCanConfirm) {
+      return;
+    }
+    const source = renameBranchSource.trim();
+    const target = renameBranchNameTrimmed;
+    if (!source || !target) {
+      return;
+    }
     await runOperation("renameBranch", async () => {
-      const trimmed = next.trim();
-      await renameGitBranch(workspaceId, branchName, trimmed);
-      setSelectedBranch(trimmed);
+      await renameGitBranch(workspaceId, source, target);
+      setSelectedBranch(target);
+      setRenameBranchDialogOpen(false);
+      setRenameBranchSource("");
+      setRenameBranchName("");
     });
-  }, [closeBranchContextMenu, runOperation, selectedBranch, t, workspaceId]);
+  }, [renameBranchCanConfirm, renameBranchNameTrimmed, renameBranchSource, runOperation, workspaceId]);
 
   const handleMergeBranch = useCallback(async (targetBranch?: string | null) => {
     const branchName = targetBranch ?? selectedBranch;
@@ -4740,7 +4808,6 @@ export function GitHistoryPanel({
     const currentDisabledReason = t("git.historyBranchMenuUnavailableCurrent");
     const remoteDisabledReason = t("git.historyBranchMenuUnavailableRemote");
     const noCurrentBranchDisabledReason = t("git.historyBranchMenuUnavailableNoCurrent");
-    const todoDisabledReason = t("git.historyBranchMenuUnavailableNotImplemented");
     const currentBranchName = currentBranch ?? t("git.unknown");
     const remoteName = branchContextMenu.branch.remote ?? null;
 
@@ -4882,19 +4949,13 @@ export function GitHistoryPanel({
         label: t("git.historyBranchMenuRename"),
         icon: <Pencil size={14} aria-hidden />,
         dividerBefore: true,
-        disabled: Boolean(baseDisabledReason || isCurrent || isRemote || DISABLE_HISTORY_BRANCH_RENAME),
+        disabled: Boolean(baseDisabledReason || isRemote),
         disabledReason:
           baseDisabledReason
-          || (isCurrent
-            ? currentDisabledReason
-            : isRemote
-              ? remoteDisabledReason
-              : DISABLE_HISTORY_BRANCH_RENAME
-                ? todoDisabledReason
-                : null),
+          || (isRemote ? remoteDisabledReason : null),
         onSelect: () => {
           closeBranchContextMenu();
-          void handleRenameBranch(targetBranch);
+          handleOpenRenameBranchDialog(targetBranch);
         },
       },
       {
@@ -4923,7 +4984,7 @@ export function GitHistoryPanel({
     handleMergeBranch,
     handleOpenPushDialog,
     handleRebaseCurrentOntoBranch,
-    handleRenameBranch,
+    handleOpenRenameBranchDialog,
     handleShowDiffWithWorktree,
     operationLoading,
     runOperation,
@@ -5636,8 +5697,14 @@ export function GitHistoryPanel({
           }
           return;
         }
+        if (renameBranchDialogOpen && event.key === "Escape") {
+          event.preventDefault();
+          closeRenameBranchDialog();
+          return;
+        }
         if (
           createBranchDialogOpen ||
+          renameBranchDialogOpen ||
           resetDialogOpen ||
           pushDialogOpen ||
           createPrDialogOpen ||
@@ -5720,6 +5787,7 @@ export function GitHistoryPanel({
           <div className="git-history-toolbar-action-group">
             <ActionSurface
               className="git-history-chip git-history-chip-pr"
+              active={createPrDialogOpen}
               onActivate={handleOpenCreatePrDialog}
               disabled={!createPrCanOpen}
               title={createPrToolbarDisabledReason ?? t("git.historyCreatePr")}
@@ -5729,6 +5797,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
+              active={pullDialogOpen}
               onActivate={handleOpenPullDialog}
               disabled={Boolean(operationLoading)}
               title={t("git.pull")}
@@ -5738,6 +5807,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
+              active={pushDialogOpen}
               onActivate={handleOpenPushDialog}
               disabled={Boolean(operationLoading)}
               title={t("git.push")}
@@ -5747,6 +5817,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
+              active={syncDialogOpen}
               onActivate={handleOpenSyncDialog}
               disabled={Boolean(operationLoading)}
               title={t("git.sync")}
@@ -5756,6 +5827,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
+              active={fetchDialogOpen}
               onActivate={handleOpenFetchDialog}
               disabled={Boolean(operationLoading)}
               title={t("git.fetch")}
@@ -5765,6 +5837,7 @@ export function GitHistoryPanel({
             </ActionSurface>
             <ActionSurface
               className="git-history-chip"
+              active={refreshDialogOpen}
               onActivate={handleOpenRefreshDialog}
               disabled={Boolean(operationLoading) || historyLoading}
               title={t("git.refresh")}
@@ -5891,9 +5964,9 @@ export function GitHistoryPanel({
               </ActionSurface>
               <ActionSurface
                 className="git-history-mini-chip"
-                onActivate={() => void handleRenameBranch()}
-                disabled={DISABLE_HISTORY_BRANCH_RENAME || DISABLE_HISTORY_ACTION_BUTTONS}
-                title={t("git.historyRename")}
+                onActivate={() => handleOpenRenameBranchDialog(selectedLocalBranchForRename)}
+                disabled={Boolean(DISABLE_HISTORY_ACTION_BUTTONS || renameBranchToolbarDisabledReason)}
+                title={renameBranchToolbarDisabledReason ?? t("git.historyRename")}
                 ariaLabel={t("git.historyRename")}
               >
                 <Pencil size={13} aria-hidden />
@@ -8741,6 +8814,70 @@ export function GitHistoryPanel({
                   onClick={() => void handleCreateBranchConfirm()}
                 >
                   {createBranchSubmitting ? t("common.loading") : t("common.confirm")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {renameBranchDialogOpen ? (
+          <div
+            className="git-history-create-branch-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !renameBranchSubmitting) {
+                closeRenameBranchDialog();
+              }
+            }}
+          >
+            <div
+              className="git-history-create-branch-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("git.historyRenameBranchDialogTitle")}
+            >
+              <div className="git-history-create-branch-title">
+                {t("git.historyRenameBranchDialogTitle")}
+              </div>
+              <label className="git-history-create-branch-field">
+                <span>{t("git.historyRenameBranchDialogSourceLabel")}</span>
+                <input value={renameBranchSource} disabled />
+              </label>
+              <label className="git-history-create-branch-field">
+                <span>{t("git.historyRenameBranchDialogNameLabel")}</span>
+                <input
+                  ref={renameBranchNameInputRef}
+                  value={renameBranchName}
+                  disabled={renameBranchSubmitting}
+                  placeholder={t("git.historyPromptRenameBranch")}
+                  onChange={(event) => setRenameBranchName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && renameBranchCanConfirm) {
+                      event.preventDefault();
+                      void handleRenameBranchConfirm();
+                    }
+                  }}
+                />
+              </label>
+              {renameBranchSubmitting ? (
+                <div className="git-history-create-branch-hint">
+                  {t("git.historyRenameBranchDialogBusy")}
+                </div>
+              ) : null}
+              <div className="git-history-create-branch-actions">
+                <button
+                  type="button"
+                  className="git-history-create-branch-btn is-cancel"
+                  disabled={renameBranchSubmitting}
+                  onClick={closeRenameBranchDialog}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="git-history-create-branch-btn is-confirm"
+                  disabled={!renameBranchCanConfirm}
+                  onClick={() => void handleRenameBranchConfirm()}
+                >
+                  {renameBranchSubmitting ? t("common.loading") : t("common.confirm")}
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryPanel, buildFileTreeItems, getDefaultColumnWidths } from "./GitHistoryPanel";
 
@@ -380,6 +380,24 @@ describe("GitHistoryPanel interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "menu.maximize" }));
     expect(dialog.className).toContain("is-maximized");
     expect(screen.getByRole("button", { name: "common.restore" })).toBeTruthy();
+  });
+
+  it("renames selected local branch from toolbar rename button", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("git.historyRename")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText("git.historyRename"));
+    const dialog = await screen.findByRole("dialog", { name: "git.historyRenameBranchDialogTitle" });
+    const renameInput = within(dialog).getByPlaceholderText("git.historyPromptRenameBranch");
+    fireEvent.change(renameInput, { target: { value: "main-renamed" } });
+    fireEvent.click(within(dialog).getByText("common.confirm"));
+
+    await waitFor(() => {
+      expect(tauriService.renameGitBranch).toHaveBeenCalledWith("w1", "main", "main-renamed");
+    });
   });
 
   it("opens pull dialog and runs pull only after confirm", async () => {
